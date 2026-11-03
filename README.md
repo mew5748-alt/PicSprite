@@ -6,13 +6,18 @@
 
 ## 下载安装
 
-到 [Releases](https://github.com/mew5748-alt/PicSprite/releases/latest) 下载 **`看图精灵-Setup-1.0.0.exe`**，双击按向导安装即可，无需 Python 环境。
+到 [Releases](https://github.com/mew5748-alt/PicSprite/releases/latest) 下载 **`PicSprite-Setup-1.0.0.exe`**，双击按向导安装即可，无需 Python 环境。
 
-- 单个 exe 安装包，约 50 MB，安装后占用约 120 MB
+- 单个 exe 安装包，约 94 MB，安装后占用约 217 MB
 - 装到当前用户目录 `%LOCALAPPDATA%\Programs\PicSprite`，**不需要管理员权限**
 - 自带卸载程序（开始菜单「卸载看图精灵」或 设置 → 应用）
 - 可选把看图精灵加入图片的「打开方式」（不修改你的默认打开程序）
-- 静默安装：`看图精灵-Setup-1.0.0.exe /S`
+- 静默安装：`PicSprite-Setup-1.0.0.exe /S`
+
+```powershell
+# 校验下载的安装包（值见 Release 里的 SHA256SUMS.txt）
+Get-FileHash .\PicSprite-Setup-1.0.0.exe -Algorithm SHA256
+```
 
 ## 功能一览
 
@@ -91,6 +96,7 @@ python main.py D:\a.jpg        :: 打开单张图片
 - 只要绿色版程序目录：双击 **`build_exe.bat`**，产物在 `dist\看图精灵\看图精灵.exe`，
   整个 `dist\看图精灵` 文件夹拷走即可在没装 Python 的电脑上运行。
 - 要**安装包**：`python tools/build_release.py`，产物是 `dist\看图精灵-Setup-1.0.0.exe`
+  （发布时重命名为 `PicSprite-Setup-<版本>.exe`，避免中文文件名在下载链接里出错）
   （自带解压安装引擎，安装/卸载/快捷方式/文件关联全部自实现，不依赖 Inno Setup）。
 
 安装包支持 `/S` 静默安装、`/uninstall` 卸载。

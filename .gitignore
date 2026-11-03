@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 打包产物
+build/
+dist/
+*.spec
+
+# GitHub 辅助文件
+_gh*.json
+
+# 测试中间产物
+tests/samples/
+tests/shots/*.tmp
+*.log
+
+# 发布流程临时文件
+_repo*.json

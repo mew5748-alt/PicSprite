@@ -1,5 +1,9 @@
 # 看图精灵 (PicSprite)
 
+[![release](https://img.shields.io/github/v/release/mew5748-alt/PicSprite?label=release)](https://github.com/mew5748-alt/PicSprite/releases/latest)
+[![platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-2f6fed)](https://github.com/mew5748-alt/PicSprite/releases/latest)
+[![license](https://img.shields.io/github/license/mew5748-alt/PicSprite)](LICENSE)
+
 一个为 Windows 打造的轻量看图工具：打开快、能编辑、能批量、能压体积，日常看图基本不用再装第二个软件。
 
 ![主界面](tests/shots/01-viewer.png)

@@ -166,8 +166,12 @@ ImageViewer/
 ## 自测
 
 ```bat
-python tests/test_core.py      :: 多格式读写 / 体积压缩 / 批量逻辑
-python tests/test_flow.py      :: 真实文件的保存、备份、重命名、删除、快捷键
-python tests/test_gui.py       :: 界面主流程 + 截图
-python tests/test_dialogs.py   :: 批量转换/重命名/压缩/另存为 端到端
+python tests/test_core.py        :: 多格式读写 / 体积压缩 / 批量逻辑
+python tests/test_flow.py        :: 真实文件的保存、备份、重命名、删除、快捷键
+python tests/test_gui.py         :: 界面主流程 + 截图
+python tests/test_dialogs.py     :: 批量转换/重命名/压缩/另存为 端到端
+python tests/test_setup_silent.py:: 安装包静默安装 → 启动 → 卸载（用 dist 里的 exe）
+python tests/test_setup_gui.py   :: 安装向导图形流程（自动点「安装」，验证产物后清理）
 ```
+
+安装包的两个测试都要先构建：`python tools/build_release.py`。

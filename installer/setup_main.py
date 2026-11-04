@@ -39,6 +39,19 @@ def default_dir() -> str:
 
 
 def desktop_dir() -> str:
+    """桌面目录（可能被用户重定向到 D 盘等，优先读注册表）。"""
+    try:
+        import winreg
+        key = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders")
+        val, _ = winreg.QueryValueEx(key, "Desktop")
+        winreg.CloseKey(key)
+        path = os.path.expandvars(val)
+        if path and os.path.isdir(path):
+            return path
+    except Exception:
+        pass
     return os.path.join(os.path.expanduser("~"), "Desktop")
 
 
@@ -63,6 +76,9 @@ def make_shortcut(lnk_path: str, target: str, workdir: str, icon: str,
              wd=workdir.replace("'", "''"), ico=icon.replace("'", "''"),
              desc=desc.replace("'", "''"))
     try:
+        parent = os.path.dirname(lnk_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
         subprocess.run(["powershell", "-NoProfile", "-NonInteractive",
                         "-WindowStyle", "Hidden", "-Command", ps],
                        creationflags=CREATE_NO_WINDOW, timeout=40,

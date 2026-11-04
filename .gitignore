@@ -20,3 +20,6 @@ tests/shots/*.tmp
 
 # 发布流程临时文件
 _repo*.json
+_*.json
+_hdr.py
+_hdr.txt

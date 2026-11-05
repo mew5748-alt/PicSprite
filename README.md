@@ -159,6 +159,7 @@ ImageViewer/
 │  └─ setup_main.py        安装/卸载程序（安装包 exe 的源码）
 ├─ tools/
 │  ├─ build_release.py     一键产出安装包
+│  ├─ push_asset.py        上传安装包到 GitHub Release
 │  └─ make_icon.py         生成 assets/app.ico
 ├─ viewer/
 │  ├─ config.py            动作注册表、快捷键默认值、配置读写

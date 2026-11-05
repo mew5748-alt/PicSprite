@@ -10,17 +10,17 @@
 
 ## 下载安装
 
-到 [Releases](https://github.com/mew5748-alt/PicSprite/releases/latest) 下载 **`PicSprite-Setup-1.2.2.exe`**，双击按向导安装即可，无需 Python 环境。
+到 [Releases](https://github.com/mew5748-alt/PicSprite/releases/latest) 下载 **`PicSprite-Setup-1.3.0.exe`**，双击按向导安装即可，无需 Python 环境。
 
 - 单个 exe 安装包，约 100 MB，安装后占用约 252 MB
 - 装到当前用户目录 `%LOCALAPPDATA%\Programs\PicSprite`，**不需要管理员权限**
 - 自带卸载程序（开始菜单「卸载看图精灵」或 设置 → 应用）
 - 可选把看图精灵加入图片的「打开方式」（不修改你的默认打开程序）
-- 静默安装：`PicSprite-Setup-1.2.2.exe /S`（同样会注册“打开方式”，不想注册加 `/noassoc`）
+- 静默安装：`PicSprite-Setup-1.3.0.exe /S`（同样会注册“打开方式”，不想注册加 `/noassoc`）
 
 ```powershell
 # 校验下载的安装包（值见 Release 里的 SHA256SUMS.txt）
-Get-FileHash .\PicSprite-Setup-1.2.2.exe -Algorithm SHA256
+Get-FileHash .\PicSprite-Setup-1.3.0.exe -Algorithm SHA256
 ```
 
 ## 功能一览
@@ -31,8 +31,9 @@ Get-FileHash .\PicSprite-Setup-1.2.2.exe -Algorithm SHA256
 - 支持 iPhone 默认的 **HEIC / HEIF**（内置解码器，无需装扩展），也能另存为 HEIC
 - 缩放（滚轮对准光标缩放）、拖动平移、适应窗口、1:1、全屏、幻灯片播放
 - 自动按 EXIF 方向摆正手机照片；GIF 与多页 TIFF 可逐帧查看
-- 缩略图墙：异步加载 + 磁盘缓存，切回文件夹秒开；支持筛选与多种排序
-- 左侧目录树、右侧信息面板（尺寸/格式/体积/拍摄参数）、拖拽打开、最近文件夹记忆
+- **缩略图栏**：看图时左侧常驻当前文件夹的缩略图，单击直接换图、当前图自动高亮，可一键隐藏（Ctrl+Alt+T）
+- 缩略图墙：打开文件夹默认先看整页缩略图（双击进大图），异步加载 + 磁盘缓存，切回文件夹秒开；支持筛选与多种排序
+- 左侧目录树 + 缩略图栏、右侧信息面板（尺寸/格式/体积/拍摄参数）、拖拽打开、最近文件夹记忆
 
 **打印**
 
@@ -83,7 +84,7 @@ Get-FileHash .\PicSprite-Setup-1.2.2.exe -Algorithm SHA256
 
 ## 界面
 
-| 看图 | 缩略图墙 |
+| 看图（左侧缩略图栏） | 整页缩略图墙 |
 | --- | --- |
 | ![看图](tests/shots/01-viewer.png) | ![缩略图墙](tests/shots/04-grid.png) |
 
@@ -132,7 +133,7 @@ python main.py D:\a.jpg        :: 打开单张图片
 
 - 只要绿色版程序目录：双击 **`build_exe.bat`**，产物在 `dist\看图精灵\看图精灵.exe`，
   整个 `dist\看图精灵` 文件夹拷走即可在没装 Python 的电脑上运行。
-- 要**安装包**：`python tools/build_release.py`，产物是 `dist\看图精灵-Setup-1.2.2.exe`
+- 要**安装包**：`python tools/build_release.py`，产物是 `dist\看图精灵-Setup-1.3.0.exe`
   （发布时重命名为 `PicSprite-Setup-<版本>.exe`，避免中文文件名在下载链接里出错）
   （自带解压安装引擎，安装/卸载/快捷方式/文件关联全部自实现，不依赖 Inno Setup）。
 
@@ -147,12 +148,12 @@ python main.py D:\a.jpg        :: 打开单张图片
 | 压缩到指定大小 | Ctrl+Alt+C | 适应窗口 / 100% | Ctrl+0 / Ctrl+1 |
 | 向左 / 向右旋转 | Ctrl+L / Ctrl+Shift+R | 裁剪 / 涂鸦 / 文字 | C / D / T |
 | 水平 / 垂直翻转 | Ctrl+H / Ctrl+J | 撤销 / 重做 | Ctrl+Z / Ctrl+Y |
-| 缩略图墙 | Tab | 全屏 | F11 |
-| 打印 | Ctrl+P | 打印预览 | Ctrl+Shift+P |
-| 身份证打印 | Ctrl+Shift+I | 批量处理 | Ctrl+B |
-| 幻灯片 | F6（Esc 退出） | 设为壁纸 | Ctrl+Alt+W |
-| 重命名 / 删除 | F2 / Del | 设置 | Ctrl+, |
-| 快捷键速查 | F1 | — | — |
+| 缩略图墙 | Tab | 缩略图栏开关 | Ctrl+Alt+T |
+| 全屏 | F11 | 打印 | Ctrl+P |
+| 打印预览 | Ctrl+Shift+P | 身份证打印 | Ctrl+Shift+I |
+| 批量处理 | Ctrl+B | 幻灯片 | F6（Esc 退出） |
+| 设为壁纸 | Ctrl+Alt+W | 重命名 / 删除 | F2 / Del |
+| 设置 | Ctrl+, | 快捷键速查 | F1 |
 
 ## 目录结构
 
@@ -171,7 +172,8 @@ ImageViewer/
 │  ├─ config.py            动作注册表、快捷键默认值、配置读写
 │  ├─ imageio.py           多格式读写、缩放、编码体积控制（核心）
 │  ├─ canvas.py            画布：缩放/平移/旋转/裁剪/涂鸦/文字
-│  ├─ grid.py              缩略图墙（异步加载 + 缓存）
+│  ├─ grid.py              整页缩略图墙（异步加载 + 缓存）
+│  ├─ strip.py             左侧缩略图栏（跟随当前图片高亮）
 │  ├─ thumbcache.py        缩略图磁盘缓存与 LRU 清理
 │  ├─ batch.py             批量处理逻辑
 │  ├─ printing.py          打印版面计算与绘制（打印 / 预览 / PDF 共用）
@@ -219,6 +221,7 @@ python tests/test_print_gui.py   :: 打印对话框（分页、选项联动、�
 python tests/test_idcard.py      :: 身份证自动裁剪 + 四种朝向自动转正 + A4 物理尺寸（PDF 回读量像素）
 python tests/test_idcard_gui.py  :: 身份证窗口（正反面、自动转正与手动旋转、手动框选、份数）+ 截图
 python tests/test_heic.py        :: HEIC/HEIF 读取、缩略图、另存与压缩
+python tests/test_strip.py       :: 缩略图栏、打开文件夹默认进缩略图墙
 python tests/test_setup_silent.py:: 安装包静默安装 → 启动 → 卸载（用 dist 里的 exe）
 python tests/test_setup_gui.py   :: 安装向导图形流程（自动点「安装」，验证产物后清理）
 ```

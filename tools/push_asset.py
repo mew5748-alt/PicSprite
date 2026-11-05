@@ -15,7 +15,7 @@ import urllib.parse
 import urllib.request
 
 OWNER, REPO = "mew5748-alt", "PicSprite"
-TAG = "v1.2.2"
+TAG = "v1.3.0"
 API = "https://api.github.com"
 
 

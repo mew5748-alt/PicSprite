@@ -85,7 +85,21 @@ class SettingsDialog(QDialog):
         self.thumb_size.setRange(96, 320)
         self.thumb_size.setValue(settings.get_int("general/thumb_size", 172))
         self.thumb_size.setSuffix(" 像素")
-        f1.addRow("缩略图大小", self.thumb_size)
+        f1.addRow("缩略图墙大小", self.thumb_size)
+
+        self.show_strip = QCheckBox("看图时在左侧显示缩略图栏")
+        self.show_strip.setChecked(settings.get_bool("view/show_strip", True))
+        f1.addRow("", self.show_strip)
+
+        self.strip_size = QSpinBox()
+        self.strip_size.setRange(72, 220)
+        self.strip_size.setValue(settings.get_int("general/strip_size", 104))
+        self.strip_size.setSuffix(" 像素")
+        f1.addRow("缩略图栏大小", self.strip_size)
+
+        self.folder_to_grid = QCheckBox("打开文件夹时先显示整页缩略图")
+        self.folder_to_grid.setChecked(settings.get_bool("view/folder_to_grid", True))
+        f1.addRow("", self.folder_to_grid)
         v.addWidget(box1)
 
         box2 = QGroupBox("显示与保存")
@@ -294,6 +308,9 @@ class SettingsDialog(QDialog):
         settings.set("general/slideshow_interval", self.slide_interval.value())
         settings.set("general/sort", self.sort_box.currentData())
         settings.set("general/thumb_size", self.thumb_size.value())
+        settings.set("general/strip_size", self.strip_size.value())
+        settings.set("view/show_strip", self.show_strip.isChecked())
+        settings.set("view/folder_to_grid", self.folder_to_grid.isChecked())
         settings.set("view/canvas_bg", self.bg_box.currentData())
         settings.set("general/smooth_zoom", self.smooth.isChecked())
         settings.set("general/backup_before_overwrite", self.backup.isChecked())

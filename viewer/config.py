@@ -12,7 +12,7 @@ from PySide6.QtCore import QSettings
 APP_NAME = "看图精灵"
 APP_ID = "PicSprite"
 ORGANIZATION = "PicSprite"
-APP_VERSION = "1.2.2"
+APP_VERSION = "1.3.0"
 
 # ---------------------------------------------------------------- 路径
 
@@ -84,7 +84,8 @@ ACTIONS: List[ActionDef] = [
     ActionDef("edit.reset", "放弃所有修改", "", CAT_EDIT, True, "reload", "回到磁盘上的原始画面"),
 
     # ---- 视图
-    ActionDef("view.grid", "缩略图浏览", "Tab", CAT_VIEW, True, "grid", "在单图与缩略图墙之间切换"),
+    ActionDef("view.grid", "缩略图浏览（整页）", "Tab", CAT_VIEW, True, "grid", "在单图与缩略图墙之间切换"),
+    ActionDef("view.strip", "缩略图栏", "Ctrl+Alt+T", CAT_VIEW, False, "strip", "在左侧常驻显示当前文件夹的缩略图，单击即可切换"),
     ActionDef("view.fullscreen", "全屏", "F11", CAT_VIEW, True, "fullscreen", ""),
     ActionDef("view.slideshow", "幻灯片播放", "F6", CAT_VIEW, True, "slideshow", "按间隔自动播放，Esc 退出"),
     ActionDef("view.zoom_in", "放大", "Ctrl+=", CAT_VIEW, True, "zoom_in", ""),
@@ -156,6 +157,7 @@ DEFAULTS = {
     "general/open_last": True,
     "general/last_folder": "",
     "general/thumb_size": 172,
+    "general/strip_size": 104,
     "general/sort": "name_asc",
     "general/slideshow_interval": 3,
     "general/loop": True,
@@ -165,6 +167,8 @@ DEFAULTS = {
     "general/preload_neighbors": True,
     "view/canvas_bg": "dark",
     "view/checkerboard": True,
+    "view/show_strip": True,
+    "view/folder_to_grid": True,
     "cache/max_mb": 800,
     # 打印偏好
     "print/per_page": 1,

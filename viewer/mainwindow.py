@@ -31,6 +31,7 @@ from .idcard import IdCardOptions
 from .printdialog import PrintDialog
 from .printing import PrintItem, PrintOptions
 from .settingsdialog import SettingsDialog
+from .strip import StripPanel
 from .style import CANVAS_COLORS
 from .thumbcache import ThumbCache
 from .workers import LoadTask, TaskPool
@@ -46,7 +47,7 @@ MENU_LAYOUT = {
              "edit.resize", "-", "file.copy_image", "file.paste_image",
              "file.copy_path", "-", "edit.reset"],
     "图片": ["image.rot_left", "image.rot_right", "image.flip_h", "image.flip_v"],
-    "视图": ["view.grid", "view.fullscreen", "view.slideshow", "-",
+    "视图": ["view.grid", "view.strip", "view.fullscreen", "view.slideshow", "-",
              "view.zoom_in", "view.zoom_out", "view.fit", "view.actual", "-",
              "view.prev", "view.next", "view.first", "view.last", "-",
              "view.frame_prev", "view.frame_next", "view.animate", "-",
@@ -64,7 +65,7 @@ TOOLBAR_ITEMS = [
     "edit.crop", "edit.draw", "edit.text", "|",
     "edit.undo", "edit.redo", "|",
     "file.save", "file.save_as", "file.compress", "|",
-    "view.grid", "view.slideshow", "|",
+    "view.grid", "view.strip", "view.slideshow", "|",
     "tools.batch", "tools.settings",
 ]
 
@@ -173,6 +174,7 @@ class MainWindow(QMainWindow):
             "edit.resize": self.act_resize,
             "edit.reset": self.act_reset,
             "view.grid": self.toggle_grid,
+            "view.strip": self.toggle_strip,
             "view.fullscreen": self.toggle_fullscreen,
             "view.slideshow": self.toggle_slideshow,
             "view.zoom_in": lambda: self.canvas.zoom_in(),
@@ -259,14 +261,32 @@ class MainWindow(QMainWindow):
         self.tree.setMinimumWidth(170)
         self.tree.setMaximumWidth(320)
 
+        self.strip_panel = StripPanel(self.cache, self.cfg.get_int("general/strip_size", 104))
+        self.strip_panel.openRequested.connect(self._open_from_grid)
+
+        tree_box = QWidget()
+        tv = QVBoxLayout(tree_box)
+        tv.setContentsMargins(0, 0, 0, 0)
+        tv.setSpacing(6)
+        title = QLabel("文件夹")
+        title.setObjectName("subtitle")
+        tv.addWidget(title)
+        tv.addWidget(self.tree, 1)
+
+        self.left_splitter = QSplitter(Qt.Orientation.Vertical)
+        self.left_splitter.setChildrenCollapsible(False)
+        self.left_splitter.addWidget(tree_box)
+        self.left_splitter.addWidget(self.strip_panel)
+        self.left_splitter.setStretchFactor(0, 1)
+        self.left_splitter.setStretchFactor(1, 0)
+        self.left_splitter.setSizes([460, 300])
+        self.left_splitter.setHandleWidth(3)
+
         left = QWidget()
         lv = QVBoxLayout(left)
         lv.setContentsMargins(8, 8, 0, 8)
         lv.setSpacing(6)
-        title = QLabel("文件夹")
-        title.setObjectName("subtitle")
-        lv.addWidget(title)
-        lv.addWidget(self.tree, 1)
+        lv.addWidget(self.left_splitter, 1)
         left.setMaximumWidth(330)
 
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -486,6 +506,11 @@ class MainWindow(QMainWindow):
         self.grid_page.size_slider.setValue(self.cfg.get_int("general/thumb_size", 172))
         self.grid_page.size_slider.blockSignals(False)
         self.grid_page.set_sort(self.cfg.get("general/sort", "name_asc"))
+        self.strip_panel.set_thumb_size(self.cfg.get_int("general/strip_size", 104))
+        show_strip = self.cfg.get_bool("view/show_strip", True)
+        self.strip_panel.setVisible(show_strip)
+        self.actions["view.strip"].setCheckable(True)
+        self.actions["view.strip"].setChecked(show_strip)
         self.actions["view.info"].setCheckable(True)
         self.actions["view.info"].setChecked(self.dock.isVisible())
 
@@ -495,6 +520,12 @@ class MainWindow(QMainWindow):
         if geo:
             try:
                 self.restoreGeometry(geo)
+            except Exception:
+                pass
+        state = self.cfg.q.value("window/left_splitter")
+        if state:
+            try:
+                self.left_splitter.restoreState(state)
             except Exception:
                 pass
 
@@ -519,9 +550,12 @@ class MainWindow(QMainWindow):
         self.cache.prune_async()
 
     # ================================================================== 文件夹与加载
-    def open_folder(self, folder: str, switch_grid: bool = False, select: str = "") -> None:
+    def open_folder(self, folder: str, switch_grid: Optional[bool] = None,
+                    select: str = "") -> None:
         if not folder or not os.path.isdir(folder):
             return
+        if switch_grid is None:
+            switch_grid = self.cfg.get_bool("view/folder_to_grid", True)
         folder = os.path.abspath(folder)
         self.folder = folder
         self.files = list_images(folder)
@@ -533,8 +567,24 @@ class MainWindow(QMainWindow):
             self.path = select
             self.index = self._index_of(select)
         if switch_grid:
+            if self.files:
+                target = select if select in self.files else (
+                    self.path if self.path in self.files else self.files[0])
+                self.path = target
+                self.index = self._index_of(target)
+                self.grid_page.select_path(target)
+            else:
+                self.path = None
+                self.index = -1
             self.stack.setCurrentWidget(self.grid_page)
             self.actions["view.grid"].setChecked(True)
+            if self.path:
+                same = (self.loaded is not None and self.loaded.path
+                        and os.path.normcase(self.loaded.path) == os.path.normcase(self.path))
+                if not same:                 # 后台备好首图，切回单图时立即可见
+                    self._load(self.path)
+            else:
+                self._show_empty("这个文件夹里没有可显示的图片")
             self._update_status()
             self._update_actions()
             return
@@ -607,6 +657,7 @@ class MainWindow(QMainWindow):
         self.cfg.push_recent("files", loaded.path)
         if self.folder and loaded.path in self.files:
             self.grid_page.select_path(loaded.path)
+            self.strip_panel.set_current(loaded.path)
         self._toast(os.path.basename(loaded.path))
 
     def _show_empty(self, text: str) -> None:
@@ -681,7 +732,9 @@ class MainWindow(QMainWindow):
         if self.stack.currentWidget() is self.grid_page:
             self.stack.setCurrentWidget(self.canvas)
             self.actions["view.grid"].setChecked(False)
-            if not self.image and self.path:
+            stale = (self.loaded is None or not self.loaded.path or not self.path
+                     or os.path.normcase(self.loaded.path) != os.path.normcase(self.path))
+            if self.path and stale:
                 self._load(self.path)
         else:
             if not self.files:
@@ -693,6 +746,29 @@ class MainWindow(QMainWindow):
                 self.grid_page.select_path(self.path)
         self._update_status()
         self._update_actions()
+
+    def toggle_strip(self) -> None:
+        """显示 / 隐藏左侧缩略图栏。"""
+        show = not self.strip_panel.isVisible()
+        self.strip_panel.setVisible(show)
+        self.actions["view.strip"].setChecked(show)
+        self.cfg.set("view/show_strip", show)
+        if show:
+            self._sync_strip()
+            self._toast("缩略图栏已显示")
+        else:
+            self._toast("缩略图栏已隐藏")
+
+    def _sync_strip(self) -> None:
+        """让缩略图栏跟上当前文件夹与当前图片。"""
+        panel = getattr(self, "strip_panel", None)
+        if panel is None:
+            return
+        key = (self.folder, tuple(self.files))
+        if getattr(self, "_strip_key", None) != key:
+            self._strip_key = key
+            panel.set_folder(self.folder, self.files)
+        panel.set_current(self.path)
 
     def toggle_fullscreen(self) -> None:
         if self.isFullScreen():
@@ -1532,6 +1608,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"{name}{star} — {APP_NAME}" if name else APP_NAME)
 
     def _update_status(self) -> None:
+        self._sync_strip()
         if self.stack.currentWidget() is self.grid_page:
             sel = len(self.grid_page.selected_paths())
             self.lbl_path.setText(self.folder or "缩略图浏览")
@@ -1695,7 +1772,7 @@ class MainWindow(QMainWindow):
     def _on_tree_click(self, index: QModelIndex) -> None:
         path = self.fs_model.filePath(index)
         if os.path.isdir(path):
-            self.open_folder(path, switch_grid=False)
+            self.open_folder(path)
 
     def keyPressEvent(self, event) -> None:
         key = event.key()
@@ -1736,6 +1813,7 @@ class MainWindow(QMainWindow):
             return
         try:
             self.cfg.q.setValue("window/geometry", self.saveGeometry())
+            self.cfg.q.setValue("window/left_splitter", self.left_splitter.saveState())
             self.cfg.q.sync()
         except Exception:
             pass

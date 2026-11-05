@@ -168,6 +168,19 @@ QHeaderView::section {{
 }}
 QTableWidget {{ gridline-color: #eef0f4; }}
 
+/* 左侧缩略图栏：不要边框，和目录树连成一体 */
+QWidget#stripPanel {{ background: transparent; }}
+QListWidget#thumbStrip {{
+    background: #ffffff;
+    border: 1px solid #e4e7ec;
+    border-radius: 8px;
+    padding: 4px 2px;
+}}
+QListWidget#thumbStrip::item {{ border-radius: 7px; padding: 2px; margin: 1px; }}
+QListWidget#thumbStrip::item:hover {{ background: #f3f6fd; }}
+QListWidget#thumbStrip::item:selected {{ background: #e3ecff; color: #1656d6; }}
+QListWidget#thumbStrip::item:selected:!active {{ background: #e3ecff; color: #1656d6; }}
+
 QCheckBox, QRadioButton {{ spacing: 7px; }}
 QCheckBox::indicator, QRadioButton::indicator {{
     width: 15px; height: 15px;

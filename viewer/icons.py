@@ -63,6 +63,13 @@ def _draw(p: QPainter, name: str) -> None:
         _stroke(p, [(9.5, 16.2), (14.5, 16.2)])
         _stroke(p, [(9.5, 18.3), (14.5, 18.3)])
         p.drawPoint(QPointF(17.8, 11.2))
+    elif name == "idcard":
+        # 身份证：圆角卡片 + 头像 + 两条信息线
+        p.drawRoundedRect(QRectF(2.5, 5.5, 19, 13), 2.2, 2.2)
+        p.drawEllipse(QRectF(5.4, 8.6, 4.4, 4.4))
+        p.drawArc(QRectF(4.2, 12.6, 6.8, 5.2), 0, 180 * 16)
+        _stroke(p, [(12.9, 10.2), (18.6, 10.2)])
+        _stroke(p, [(12.9, 13.8), (18.6, 13.8)])
     elif name == "rename":
         _stroke(p, [(4, 20), (5.4, 15.4), (16.4, 4.4), (19.6, 7.6), (8.6, 18.6)], True)
         _stroke(p, [(14, 20), (21, 20)])

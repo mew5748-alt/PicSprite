@@ -18,7 +18,7 @@ import zipfile
 
 APP_NAME = "看图精灵"
 APP_ID = "PicSprite"
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.0"
 APP_PUBLISHER = "PicSprite"
 APP_EXE = APP_NAME + ".exe"
 CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0

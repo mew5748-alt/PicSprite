@@ -128,7 +128,26 @@ def third():
 
 def snap2():
     shot(dlg, "print-02-4up.png")
-    print("\n[4] 9 张/页时的 2 张图")
+
+
+def printerpick():
+    print("\n[4] 打印机与单双面")
+    check("有打印机下拉框", dlg.printer_row.box.count() >= 1)
+    check("默认选中的是当前打印机",
+          dlg.printer_row.box.currentText() == dlg.printer.printerName()
+          or not dlg.printer.printerName(), dlg.printer_row.box.currentText())
+    check("默认单面", dlg.printer_row.duplex_key() == "none")
+    idx = dlg.printer_row.duplex.findData("short")
+    dlg.printer_row.duplex.setCurrentIndex(idx)
+    check("选项记录双面短边", dlg.opts.duplex == "short", dlg.opts.duplex)
+    check("打印机设成双面短边",
+          dlg.printer.duplex() == QPrinter.DuplexMode.DuplexShortSide,
+          str(dlg.printer.duplex()))
+    check("信息区标了双面", "双面" in dlg.info.text(), dlg.info.text().replace("\n", " / "))
+    dlg.printer_row.duplex.setCurrentIndex(dlg.printer_row.duplex.findData("none"))
+    check("切回单面", dlg.printer.duplex() == QPrinter.DuplexMode.DuplexNone)
+    dlg._refresh_preview()
+    print("\n[5] 9 张/页时的 2 张图")
     dlg.per_box.setCurrentIndex(dlg.per_box.findData(9))
     dlg._refresh_preview()
     check("9 张/页 6 张图 -> 1 页", dlg.page_label.text() == "第 1 / 1 页", dlg.page_label.text())
@@ -139,7 +158,7 @@ def snap3():
 
 
 def finish():
-    print("\n[5] 无图时的降级")
+    print("\n[6] 无图时的降级")
     dlg._scopes = [("current", "当前图片", lambda: [])]
     dlg._load_scope(0)
     dlg._refresh_preview()
@@ -161,6 +180,7 @@ CHAIN = [
     (700, second),
     (700, third),
     (700, snap2),
+    (700, printerpick),
     (700, snap3),
     (500, finish),
 ]

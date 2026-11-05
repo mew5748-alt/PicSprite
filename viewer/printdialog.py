@@ -6,15 +6,15 @@ import os
 from typing import Callable, List, Optional, Tuple
 
 from PySide6.QtCore import QRectF, QSize, Qt, QTimer
-from PySide6.QtGui import (QColor, QFont, QImage, QPainter, QPageLayout, QPen,
-                           QPixmap)
-from PySide6.QtPrintSupport import QPrintDialog, QPrinter
+from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPen, QPixmap
+from PySide6.QtPrintSupport import QPrinter
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog,
                                QDoubleSpinBox, QFileDialog, QFrame, QHBoxLayout,
                                QLabel, QMessageBox, QPushButton, QSizePolicy,
                                QVBoxLayout, QWidget)
 
 from . import printing
+from .printerui import PrinterRow
 from .printing import PER_PAGES, SCALES, PrintItem, PrintOptions
 
 
@@ -78,7 +78,7 @@ class PrintDialog(QDialog):
                  options: PrintOptions, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle("打印")
-        self.printer = printer
+        self._printer0 = printer
         self._scopes = scopes
         self._items: List[PrintItem] = []
         self._page = 0
@@ -91,9 +91,13 @@ class PrintDialog(QDialog):
         self._timer.setInterval(120)
         self._timer.timeout.connect(self._refresh_preview)
 
-        self.setMinimumSize(880, 620)
+        self.setMinimumSize(900, 640)
         self._build_ui()
         self._load_scope(0)
+
+    @property
+    def printer(self) -> QPrinter:
+        return self.printer_row.printer
 
     # ------------------------------------------------------------ 界面
     def _build_ui(self) -> None:
@@ -146,23 +150,33 @@ class PrintDialog(QDialog):
         side.addWidget(self._label("打印内容"))
         side.addWidget(self.scope_box)
 
-        # 每页张数
+        # 打印机 + 单/双面
+        self.printer_row = PrinterRow(self._printer0, self)
+        self.printer_row.set_duplex(self.opts.duplex)
+        self.printer_row.changed.connect(self._on_printer_changed)
+        side.addSpacing(2)
+        side.addWidget(self.printer_row)
+
+        # 每页张数 / 缩放
         self.per_box = QComboBox()
         for n in PER_PAGES:
             self.per_box.addItem(f"每页 {n} 张", n)
         idx = self.per_box.findData(self.opts.per_page)
         self.per_box.setCurrentIndex(max(0, idx))
         self.per_box.currentIndexChanged.connect(self._on_change)
-        side.addWidget(self._label("排版"))
-        side.addWidget(self.per_box)
 
-        # 缩放
         self.scale_box = QComboBox()
         for key, text in SCALES:
             self.scale_box.addItem(text, key)
         self.scale_box.setCurrentIndex(max(0, self.scale_box.findData(self.opts.scale)))
         self.scale_box.currentIndexChanged.connect(self._on_change)
-        side.addWidget(self.scale_box)
+
+        layout_row = QHBoxLayout()
+        layout_row.setSpacing(8)
+        layout_row.addWidget(self.per_box, 1)
+        layout_row.addWidget(self.scale_box, 1)
+        side.addWidget(self._label("版面"))
+        side.addLayout(layout_row)
 
         # 页边距 / 间距
         row = QHBoxLayout()
@@ -206,10 +220,6 @@ class PrintDialog(QDialog):
         self.info.setObjectName("subtitle")
         self.info.setWordWrap(True)
         side.addWidget(self.info)
-
-        self.btn_setup = QPushButton("打印机设置…")
-        self.btn_setup.clicked.connect(self._printer_setup)
-        side.addWidget(self.btn_setup)
 
         self.btn_pdf = QPushButton("导出为 PDF…")
         self.btn_pdf.clicked.connect(self._export_pdf)
@@ -271,12 +281,15 @@ class PrintDialog(QDialog):
         self.opts.gap_mm = float(self.gap_spin.value())
         self.opts.show_title = self.cb_title.isChecked()
         self.opts.show_date = self.cb_date.isChecked()
+        self.opts.duplex = self.printer_row.duplex_key()
+        self.opts.printer_name = self.printer.printerName()
 
     def _printer_summary(self) -> str:
         pw, ph = printing.paper_mm(self.printer)
         name = self.printer.printerName() or "（未选择打印机）"
         land = "横向" if pw > ph else "纵向"
-        return f"{name}\n{pw:.0f} × {ph:.0f} mm · {land} · {self.printer.resolution()} dpi"
+        duplex = "双面" if self.printer_row.duplex_key() != "none" else "单面"
+        return f"{name}\n{pw:.0f} × {ph:.0f} mm · {land} · {duplex} · {self.printer.resolution()} dpi"
 
     # ------------------------------------------------------------ 预览
     def _on_change(self, *_a) -> None:
@@ -319,12 +332,9 @@ class PrintDialog(QDialog):
         self._timer.start()
 
     # ------------------------------------------------------------ 动作
-    def _printer_setup(self) -> None:
-        dlg = QPrintDialog(self.printer, self)
-        dlg.setWindowTitle("打印机设置")
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            printing.apply_margins(self.printer, self.opts.margin_mm)
-            self._refresh_preview()
+    def _on_printer_changed(self) -> None:
+        printing.apply_margins(self.printer, self.opts.margin_mm)
+        self._refresh_preview()
 
     def _export_pdf(self) -> None:
         self._sync_options()

@@ -17,6 +17,17 @@ try:
 except Exception:
     pass
 
+# iPhone 默认的 HEIC / HEIF：Pillow 自身不解码，需要 pillow-heif 注册解码器。
+# 没装这个库时其它格式照常工作，只是打不开 HEIC。
+HEIF_AVAILABLE = False
+try:
+    import pillow_heif
+
+    pillow_heif.register_heif_opener()
+    HEIF_AVAILABLE = True
+except Exception:                          # noqa: BLE001
+    HEIF_AVAILABLE = False
+
 LANCZOS = getattr(Image, "Resampling", Image).LANCZOS
 NEAREST = getattr(Image, "Resampling", Image).NEAREST
 BICUBIC = getattr(Image, "Resampling", Image).BICUBIC
@@ -49,12 +60,16 @@ WRITE_FORMATS: List[FormatSpec] = [
     FormatSpec("GIF", "GIF（最多 256 色）", ".gif", False, False),
     FormatSpec("ICO", "ICO（Windows 图标）", ".ico", False, True, True),
 ]
+if HEIF_AVAILABLE:
+    WRITE_FORMATS.append(
+        FormatSpec("HEIF", "HEIC（苹果手机格式）", ".heic", True, False))
 FORMAT_BY_KEY: Dict[str, FormatSpec] = {f.key: f for f in WRITE_FORMATS}
 
 FMT_LABEL = {
     "JPEG": "JPG", "MPO": "JPG", "PNG": "PNG", "GIF": "GIF", "BMP": "BMP",
     "TIFF": "TIFF", "WEBP": "WebP", "ICO": "ICO", "CUR": "CUR", "TGA": "TGA",
     "PCX": "PCX", "DDS": "DDS", "JPEG2000": "JP2", "AVIF": "AVIF", "PSD": "PSD",
+    "HEIF": "HEIC", "HEIC": "HEIC",
 }
 
 EXIF_TAGS = {
@@ -74,7 +89,8 @@ def format_label(path_or_fmt: str) -> str:
         mapping = {".jpg": "JPG", ".jpeg": "JPG", ".jpe": "JPG", ".jfif": "JPG",
                    ".tif": "TIFF", ".tiff": "TIFF", ".ico": "ICO", ".cur": "CUR",
                    ".webp": "WebP", ".bmp": "BMP", ".png": "PNG", ".gif": "GIF",
-                   ".tga": "TGA", ".jp2": "JP2", ".avif": "AVIF", ".psd": "PSD"}
+                   ".tga": "TGA", ".jp2": "JP2", ".avif": "AVIF", ".psd": "PSD",
+                   ".heic": "HEIC", ".heif": "HEIC"}
         return mapping.get(ext, ext.lstrip(".").upper())
     return FMT_LABEL.get(path_or_fmt.upper(), path_or_fmt)
 
@@ -384,6 +400,9 @@ def encode_image(qimg: QImage, fmt_key: str, quality: int = 88,
         params = dict(format="PNG", optimize=True, compress_level=9)
     elif spec.key == "WEBP":
         params = dict(format="WEBP", quality=int(quality), method=4)
+    elif spec.key == "HEIF":
+        im = _flatten(im)
+        params = dict(format="HEIF", quality=int(quality))
     elif spec.key == "BMP":
         im = _flatten(im)
         params = dict(format="BMP")
@@ -442,7 +461,7 @@ def compress_to_target(qimg: QImage, fmt_key: str, target_bytes: int,
                        exif_bytes: Optional[bytes] = None) -> CompressResult:
     """把图片编码到不超过 target_bytes：先降质量，必要时再缩尺寸。"""
     spec = FORMAT_BY_KEY.get(fmt_key, FORMAT_BY_KEY["JPEG"])
-    if spec.key not in ("JPEG", "WEBP"):
+    if spec.key not in ("JPEG", "WEBP", "HEIF"):
         # 无损格式：不改质量，只能靠缩尺寸 / 调色板
         steps = [1.0] if not allow_resize else [1.0, .85, .7, .6, .5, .4, .32, .25, .18, .12]
         smallest: Optional[CompressResult] = None

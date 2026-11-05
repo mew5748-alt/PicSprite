@@ -12,7 +12,7 @@ from PySide6.QtCore import QSettings
 APP_NAME = "看图精灵"
 APP_ID = "PicSprite"
 ORGANIZATION = "PicSprite"
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.0"
 
 # ---------------------------------------------------------------- 路径
 
@@ -65,6 +65,7 @@ ACTIONS: List[ActionDef] = [
     ActionDef("file.compress", "压缩到指定大小…", "Ctrl+Alt+C", CAT_FILE, True, "compress", "压到指定 KB 大小"),
     ActionDef("file.print", "打印…", "Ctrl+P", CAT_FILE, True, "print", "打印当前图片 / 选中的图片，可导出 PDF"),
     ActionDef("file.print_preview", "打印预览…", "Ctrl+Shift+P", CAT_FILE, False, "print", "整页预览效果，可缩放翻页"),
+    ActionDef("file.id_card", "身份证打印…", "Ctrl+Shift+I", CAT_FILE, True, "idcard", "自动裁出身份证正反面，按实际尺寸排到一张 A4 上"),
     ActionDef("file.rename", "重命名…", "F2", CAT_FILE, True, "rename", "重命名当前图片"),
     ActionDef("file.delete", "删除到回收站", "Del", CAT_FILE, True, "delete", "删除当前图片"),
     ActionDef("file.copy_image", "复制图片", "Ctrl+C", CAT_FILE, True, "copy", "把当前图片复制到剪贴板"),
@@ -139,6 +140,7 @@ for _a in ACTIONS:
 # 右键菜单默认顺序（按使用频率）
 DEFAULT_CONTEXT = [
     "file.open", "file.save", "file.save_as", "file.compress", "file.print",
+    "file.id_card",
     "edit.undo", "edit.redo", "edit.crop", "edit.draw", "edit.text",
     "image.rot_left", "image.rot_right", "image.flip_h", "image.flip_v",
     "file.rename", "file.delete", "file.copy_image", "file.copy_path",
@@ -171,6 +173,14 @@ DEFAULTS = {
     "print/gap_mm": 4.0,
     "print/show_title": True,
     "print/show_date": False,
+    "print/duplex": "none",
+    "print/printer": "",
+    # 身份证打印偏好
+    "idcard/layout": "vertical",
+    "idcard/gap_mm": 18,
+    "idcard/margin_mm": 10,
+    "idcard/border": False,
+    "idcard/copies": 1,
     "recent/files": "[]",
     "recent/folders": "[]",
 }

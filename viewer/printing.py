@@ -28,6 +28,13 @@ SCALES: List[Tuple[str, str]] = [
 
 PER_PAGES: List[int] = [1, 2, 4, 6, 9]
 
+# 单双面：(键, 界面文字, QPrinter.DuplexMode)
+DUPLEX_MODES: List[Tuple[str, str]] = [
+    ("none", "单面打印"),
+    ("long", "双面 · 长边翻转（书本式）"),
+    ("short", "双面 · 短边翻转（便签式）"),
+]
+
 # 图片自身没写 DPI 时按 96 估算物理尺寸
 FALLBACK_DPI = 96.0
 
@@ -49,6 +56,8 @@ class PrintOptions:
     gap_mm: float = 4.0
     show_title: bool = True
     show_date: bool = False
+    duplex: str = "none"
+    printer_name: str = ""
 
     @property
     def caption(self) -> bool:
@@ -93,6 +102,77 @@ def canvas_rect(printer: QPrinter) -> QRectF:
 def apply_margins(printer: QPrinter, margin_mm: float) -> None:
     m = max(0.0, float(margin_mm))
     printer.setPageMargins(QMarginsF(m, m, m, m), QPageLayout.Unit.Millimeter)
+
+
+_DUPLEX_MAP = {
+    "none": QPrinter.DuplexMode.DuplexNone,
+    "long": QPrinter.DuplexMode.DuplexLongSide,
+    "short": QPrinter.DuplexMode.DuplexShortSide,
+}
+
+
+def apply_duplex(printer: QPrinter, key: str) -> None:
+    """设置单/双面。打印机不支持时 Qt 会直接忽略，不会报错。"""
+    mode = _DUPLEX_MAP.get(str(key or "none"))
+    if mode is not None:
+        try:
+            printer.setDuplex(mode)
+        except Exception:                                  # noqa: BLE001
+            pass
+
+
+def apply_print_options(printer: QPrinter, opts: PrintOptions) -> None:
+    apply_margins(printer, opts.margin_mm)
+    apply_duplex(printer, opts.duplex)
+
+
+# ---------------------------------------------------------------- 打印机
+
+def available_printers() -> list:
+    """返回系统里的打印机列表（QPrinterInfo），没有则为空。"""
+    from PySide6.QtPrintSupport import QPrinterInfo
+    try:
+        return list(QPrinterInfo.availablePrinters())
+    except Exception:                                      # noqa: BLE001
+        return []
+
+
+def find_printer(name: str):
+    from PySide6.QtPrintSupport import QPrinterInfo
+    for info in available_printers():
+        if info.printerName() == name:
+            return info
+    try:
+        return QPrinterInfo.defaultPrinter()
+    except Exception:                                      # noqa: BLE001
+        return QPrinterInfo()
+
+
+def make_printer(name: str = "", page_layout=None) -> QPrinter:
+    """按名字造一个高分辨率 QPrinter；找不到就用系统默认打印机。"""
+    info = find_printer(name) if name else find_printer("")
+    printer = QPrinter(QPrinter.PrinterMode.HighResolution) if info is None or info.isNull() \
+        else QPrinter(info, QPrinter.PrinterMode.HighResolution)
+    if page_layout is not None:
+        try:
+            printer.setPageLayout(page_layout)
+        except Exception:                                  # noqa: BLE001
+            pass
+    return printer
+
+
+def ensure_a4(printer: QPrinter) -> None:
+    """身份证打印固定用 A4 纵向；打印机默认是 Letter 之类时纠正过来。"""
+    try:
+        if printer.pageLayout().pageSize().id() == QPageSize.PageSizeId.A4:
+            return
+        printer.setPageLayout(QPageLayout(
+            QPageSize(QPageSize.PageSizeId.A4),
+            QPageLayout.Orientation.Portrait,
+            QMarginsF(0, 0, 0, 0),
+            QPageLayout.Unit.Millimeter))
+    except Exception:                                      # noqa: BLE001
+        pass
 
 
 # ---------------------------------------------------------------- 绘制
@@ -202,7 +282,7 @@ def draw_document(printer: QPrinter, items: Sequence[PrintItem],
     """把全部图片按版面打到 printer，返回页数。progress(page, total) 可选。"""
     if not items:
         return 0
-    apply_margins(printer, opts.margin_mm)
+    apply_print_options(printer, opts)
     total = page_count(len(items), opts.per_page)
     per = max(1, int(opts.per_page))
 
@@ -246,9 +326,13 @@ def printable_mm(printer: QPrinter) -> Tuple[float, float, float, float]:
     return mx, my, mx, my
 
 
-def preview_image(printer: QPrinter, items: Sequence[PrintItem], opts: PrintOptions,
-                  page: int, max_px: Tuple[int, int] = (760, 900)) -> QImage:
-    """渲染某一页的预览图（含纸张白边与页边距示意），单位是图片像素。"""
+def render_page(printer: QPrinter, margin_mm: float,
+                max_px: Tuple[int, int] = (760, 900), paint=None) -> QImage:
+    """把「一页纸」渲染成预览图：白纸 + 页边距虚线 + 内容。
+
+    paint(p, canvas, px_per_mm) 负责画内容，canvas 是图片坐标系下的可打印区。
+    打印、身份证排版等预览共用这套几何，保证预览和出纸一致。
+    """
     pw, ph = paper_mm(printer)
     if pw <= 0 or ph <= 0:
         pw, ph = 210.0, 297.0
@@ -267,7 +351,7 @@ def preview_image(printer: QPrinter, items: Sequence[PrintItem], opts: PrintOpti
     p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
 
     # 可打印区：纸张减去真实页边距（会把硬件最小边距算进去）
-    apply_margins(printer, opts.margin_mm)
+    apply_margins(printer, margin_mm)
     ml, mt, mr, mb = printable_mm(printer)
     canvas = QRectF(ml * scale, mt * scale,
                     w - (ml + mr) * scale, h - (mt + mb) * scale)
@@ -280,8 +364,16 @@ def preview_image(printer: QPrinter, items: Sequence[PrintItem], opts: PrintOpti
     p.setBrush(Qt.BrushStyle.NoBrush)
     p.drawRect(canvas.adjusted(0.5, 0.5, -0.5, -0.5))
 
-    per = max(1, int(opts.per_page))
-    chunk = list(items)[page * per:(page + 1) * per]
-    paint_canvas(p, canvas, chunk, opts, scale)
+    if paint is not None:
+        paint(p, canvas, scale)
     p.end()
     return img
+
+
+def preview_image(printer: QPrinter, items: Sequence[PrintItem], opts: PrintOptions,
+                  page: int, max_px: Tuple[int, int] = (760, 900)) -> QImage:
+    """渲染某一页的预览图（含纸张白边与页边距示意），单位是图片像素。"""
+    per = max(1, int(opts.per_page))
+    chunk = list(items)[page * per:(page + 1) * per]
+    return render_page(printer, opts.margin_mm, max_px,
+                       lambda p, canvas, k: paint_canvas(p, canvas, chunk, opts, k))

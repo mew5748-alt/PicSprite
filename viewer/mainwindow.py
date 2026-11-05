@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDockWidget,
                                QToolBar, QToolButton, QTreeView, QVBoxLayout,
                                QWidget, QColorDialog)
 
-from . import icons, imageio, printing, util
+from . import icons, idcard, imageio, printing, util
 from .batch import sort_files
 from .batchdialog import BatchDialog
 from .canvas import MODE_CROP, MODE_DRAW, MODE_TEXT, MODE_VIEW, ImageCanvas
@@ -26,6 +26,8 @@ from .config import ACTION_MAP, ACTIONS, APP_NAME, APP_VERSION, cache_dir, setti
 from .dialogs import (ColorButton, CompressDialog, PropertiesDialog, ResizeDialog,
                       SaveAsDialog, ShortcutsDialog, TextDialog, about_text)
 from .grid import GridPage
+from .idcarddialog import IdCardDialog
+from .idcard import IdCardOptions
 from .printdialog import PrintDialog
 from .printing import PrintItem, PrintOptions
 from .settingsdialog import SettingsDialog
@@ -37,7 +39,7 @@ MENU_ORDER = ["文件", "编辑", "图片", "视图", "工具", "帮助"]
 
 MENU_LAYOUT = {
     "文件": ["file.open", "file.open_folder", "-", "file.save", "file.save_as",
-             "file.compress", "-", "file.print", "file.print_preview", "-",
+             "file.compress", "-", "file.print", "file.print_preview", "file.id_card", "-",
              "file.rename", "file.delete", "-",
              "file.properties", "-", "file.quit"],
     "编辑": ["edit.undo", "edit.redo", "-", "edit.crop", "edit.draw", "edit.text",
@@ -155,6 +157,7 @@ class MainWindow(QMainWindow):
             "file.compress": self.act_compress,
             "file.print": self.act_print,
             "file.print_preview": self.act_print_preview,
+            "file.id_card": self.act_id_card,
             "file.rename": self.act_rename,
             "file.delete": self.act_delete,
             "file.copy_image": self.act_copy_image,
@@ -1080,6 +1083,10 @@ class MainWindow(QMainWindow):
             o.gap_mm = 4.0
         o.show_title = self.cfg.get_bool("print/show_title", True)
         o.show_date = self.cfg.get_bool("print/show_date", False)
+        o.duplex = str(self.cfg.get("print/duplex", "none") or "none")
+        if o.duplex not in ("none", "long", "short"):
+            o.duplex = "none"
+        o.printer_name = str(self.cfg.get("print/printer", "") or "")
         return o
 
     def _save_print_options(self, o: PrintOptions) -> None:
@@ -1089,6 +1096,9 @@ class MainWindow(QMainWindow):
         self.cfg.set("print/gap_mm", round(o.gap_mm, 1))
         self.cfg.set("print/show_title", o.show_title)
         self.cfg.set("print/show_date", o.show_date)
+        self.cfg.set("print/duplex", o.duplex)
+        if o.printer_name:
+            self.cfg.set("print/printer", o.printer_name)
 
     @staticmethod
     def _print_date(loaded) -> str:
@@ -1163,9 +1173,8 @@ class MainWindow(QMainWindow):
         return scopes
 
     def _make_printer(self, opts: PrintOptions):
-        from PySide6.QtPrintSupport import QPrinter
-        printer = QPrinter(QPrinter.PrinterMode.HighResolution)
-        printing.apply_margins(printer, opts.margin_mm)
+        printer = printing.make_printer(opts.printer_name)
+        printing.apply_print_options(printer, opts)
         return printer
 
     def act_print(self) -> None:
@@ -1189,6 +1198,7 @@ class MainWindow(QMainWindow):
             return
         self._save_print_options(dlg.opts)
         items = dlg.items
+        printer = dlg.printer
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
             pages = printing.draw_document(printer, items, dlg.opts)
@@ -1222,6 +1232,94 @@ class MainWindow(QMainWindow):
         dlg.paintRequested.connect(
             lambda pr: printing.draw_document(pr, items, opts))
         dlg.exec()
+
+    # ============================================================ 身份证打印
+    def _idcard_options(self) -> IdCardOptions:
+        o = IdCardOptions()
+        o.layout = str(self.cfg.get("idcard/layout", "vertical") or "vertical")
+        if o.layout not in ("vertical", "horizontal"):
+            o.layout = "vertical"
+        try:
+            o.gap_mm = float(self.cfg.get("idcard/gap_mm", 18))
+            o.margin_mm = float(self.cfg.get("idcard/margin_mm", 10))
+        except (TypeError, ValueError):
+            o.gap_mm, o.margin_mm = 18.0, 10.0
+        o.border = self.cfg.get_bool("idcard/border", False)
+        o.copies = max(1, min(20, self.cfg.get_int("idcard/copies", 1)))
+        o.duplex = str(self.cfg.get("print/duplex", "none") or "none")
+        o.printer_name = str(self.cfg.get("print/printer", "") or "")
+        return o
+
+    def _save_idcard_options(self, o: IdCardOptions) -> None:
+        self.cfg.set("idcard/layout", o.layout)
+        self.cfg.set("idcard/gap_mm", int(round(o.gap_mm)))
+        self.cfg.set("idcard/margin_mm", int(round(o.margin_mm)))
+        self.cfg.set("idcard/border", o.border)
+        self.cfg.set("idcard/copies", int(o.copies))
+        self.cfg.set("print/duplex", o.duplex)
+        if o.printer_name:
+            self.cfg.set("print/printer", o.printer_name)
+
+    @staticmethod
+    def _guess_front_first(paths: List[str]) -> List[str]:
+        """文件名里带「正面 / front / 人像」的排前面，剩下的保持原顺序。"""
+        def rank(p: str) -> int:
+            name = os.path.basename(p).lower()
+            if any(k in name for k in ("正面", "人像", "front", "obverse", "正")):
+                return 0
+            if any(k in name for k in ("反面", "国徽", "back", "reverse", "背")):
+                return 2
+            return 1
+        return sorted(paths, key=rank)
+
+    def _idcard_sources(self):
+        """返回 (正面图, 正面路径, 反面图, 反面路径)。"""
+        in_grid = self.stack.currentWidget() is self.grid_page
+        picked = self.grid_page.selected_paths() if in_grid else []
+        paths: List[str] = []
+        if len(picked) >= 2:
+            paths = self._guess_front_first(picked)[:2]
+        elif self.path:
+            paths = [self.path]
+            idx = self._index_of(self.path)
+            if 0 <= idx < len(self.files) - 1:
+                paths.append(self.files[idx + 1])
+            elif idx > 0:
+                paths.insert(0, self.files[idx - 1])
+
+        images = []
+        for p in paths[:2]:
+            if self.path and os.path.normcase(p) == os.path.normcase(self.path) and self.image:
+                images.append(self.image)
+                continue
+            loaded = imageio.load_image(p, max_frames=1)
+            images.append(loaded.image)
+        front = images[0] if images else None
+        back = images[1] if len(images) > 1 else None
+        fp = paths[0] if paths else ""
+        bp = paths[1] if len(paths) > 1 else ""
+        return front, fp, back, bp
+
+    def act_id_card(self) -> None:
+        self._bake_if_needed()
+        front, fp, back, bp = self._idcard_sources()
+        opts = self._idcard_options()
+        dlg = IdCardDialog(front, fp, back, bp, opts, self)
+        ok = dlg.exec() == IdCardDialog.DialogCode.Accepted
+        self._save_idcard_options(dlg.opts)
+        if not ok:
+            return
+        if dlg.front is None and dlg.back is None:
+            return
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            pages = idcard.draw_document(dlg.printer, dlg.front, dlg.back, dlg.opts)
+        except Exception as exc:                              # noqa: BLE001
+            QApplication.restoreOverrideCursor()
+            QMessageBox.critical(self, "打印失败", str(exc))
+            return
+        QApplication.restoreOverrideCursor()
+        self._toast(f"身份证已发送到打印机 · {pages} 页")
 
     def _refresh_after_write(self) -> None:
         self.files = list_images(self.folder) if self.folder else []

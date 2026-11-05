@@ -55,6 +55,18 @@ def procs(name: str) -> int:
 
 print(f"安装包：{EXE}  ({os.path.getsize(EXE) / 1024 / 1024:.1f} MB)\n")
 
+# ---------------------------------------------------------------- 预清理
+# 上一轮测试或用户手动安装可能留下快捷方式。Inno Setup 发现目标相同的快捷方式
+# 会跳过创建，卸载时也就不在它的清单里，会让「已清理」检查假失败。
+for _name in (f"{APP_NAME}.lnk", "卸载看图精灵.lnk"):
+    _p = os.path.join(STARTMENU, _name)
+    if os.path.exists(_p):
+        try:
+            os.remove(_p)
+            print(f"[0] 清理残留快捷方式：{_p}")
+        except OSError:
+            pass
+
 # ---------------------------------------------------------------- 安装
 print("[1] 静默安装")
 t0 = time.time()

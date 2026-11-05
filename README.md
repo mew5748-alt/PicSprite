@@ -10,17 +10,17 @@
 
 ## 下载安装
 
-到 [Releases](https://github.com/mew5748-alt/PicSprite/releases/latest) 下载 **`PicSprite-Setup-1.1.0.exe`**，双击按向导安装即可，无需 Python 环境。
+到 [Releases](https://github.com/mew5748-alt/PicSprite/releases/latest) 下载 **`PicSprite-Setup-1.2.0.exe`**，双击按向导安装即可，无需 Python 环境。
 
-- 单个 exe 安装包，约 94 MB，安装后占用约 217 MB
+- 单个 exe 安装包，约 100 MB，安装后占用约 252 MB
 - 装到当前用户目录 `%LOCALAPPDATA%\Programs\PicSprite`，**不需要管理员权限**
 - 自带卸载程序（开始菜单「卸载看图精灵」或 设置 → 应用）
 - 可选把看图精灵加入图片的「打开方式」（不修改你的默认打开程序）
-- 静默安装：`PicSprite-Setup-1.1.0.exe /S`
+- 静默安装：`PicSprite-Setup-1.2.0.exe /S`
 
 ```powershell
 # 校验下载的安装包（值见 Release 里的 SHA256SUMS.txt）
-Get-FileHash .\PicSprite-Setup-1.1.0.exe -Algorithm SHA256
+Get-FileHash .\PicSprite-Setup-1.2.0.exe -Algorithm SHA256
 ```
 
 ## 功能一览
@@ -28,6 +28,7 @@ Get-FileHash .\PicSprite-Setup-1.1.0.exe -Algorithm SHA256
 **看图**
 
 - 支持 BMP / JPG / JPEG / PNG / GIF / ICO / TIFF / WebP / TGA / PSD 等常见格式
+- 支持 iPhone 默认的 **HEIC / HEIF**（内置解码器，无需装扩展），也能另存为 HEIC
 - 缩放（滚轮对准光标缩放）、拖动平移、适应窗口、1:1、全屏、幻灯片播放
 - 自动按 EXIF 方向摆正手机照片；GIF 与多页 TIFF 可逐帧查看
 - 缩略图墙：异步加载 + 磁盘缓存，切回文件夹秒开；支持筛选与多种排序
@@ -41,7 +42,15 @@ Get-FileHash .\PicSprite-Setup-1.1.0.exe -Algorithm SHA256
 - 可勾选在每张图下打印文件名与拍摄日期
 - 对话框左侧是**所见即所得的分页预览**，翻页即可检查每一页，预览尺寸按打印机真实可打印区计算
 - 不需要打印机也能用：一键**导出为 PDF**，导出后会问你是否用系统默认程序打开
+- 对话框里直接**选择打印机**、切换**单面 / 双面**（长边翻转、短边翻转），纸张与质量走打印机驱动设置
 - 直接调用系统打印机驱动，走的是 Windows 原生打印，不改动原图
+
+**身份证打印**
+
+- 选正反面两张照片，自动找出卡片边界并**裁成 85.6 × 54 mm 的实际尺寸**（歪着拍也能自动摆正）
+- 两张卡片按实际大小排在**一张 A4** 上，上下或左右排列、间距与页边距可调，可一次打多份
+- 识别不准时点「调整裁剪」，在照片上拖个框就能手动指定，比例自动锁定为卡片比例
+- 同样支持导出 PDF，拿去做电子存档或发给打印店
 
 **编辑**
 
@@ -53,7 +62,7 @@ Get-FileHash .\PicSprite-Setup-1.1.0.exe -Algorithm SHA256
 
 **另存为 / 压缩**
 
-- 一键转换格式：JPG / PNG / WebP / BMP / TIFF / GIF / ICO，可带质量参数
+- 一键转换格式：JPG / PNG / WebP / BMP / TIFF / GIF / ICO / HEIC，可带质量参数
 - 保存时同时可改尺寸（百分比 / 长边 / 宽 / 高 / 精确宽高）并限制文件体积
 - **压缩到指定大小**：先二分搜索 JPEG/WebP 质量，仍超标再逐级缩小尺寸，右侧实时预估体积
 - 覆盖前自动备份到 `.picsprite_backup`，写盘采用临时文件 + 原子替换，不怕写坏原图
@@ -88,6 +97,10 @@ Get-FileHash .\PicSprite-Setup-1.1.0.exe -Algorithm SHA256
 | --- | --- |
 | ![打印](tests/shots/print-02-4up.png) | ![打印输出](tests/shots/print-04-pdf.png) |
 
+| 身份证打印 | 身份证打印输出（一张 A4 正反面） |
+| --- | --- |
+| ![身份证打印](tests/shots/idcard-01-dialog.png) | ![身份证输出](tests/shots/idcard-02-pdf.png) |
+
 | 设置（快捷键 / 右键菜单） | 右键菜单 |
 | --- | --- |
 | ![设置](tests/shots/07-settings.png) | ![右键菜单](tests/shots/08-menu.png) |
@@ -98,7 +111,7 @@ Get-FileHash .\PicSprite-Setup-1.1.0.exe -Algorithm SHA256
 
 ## 运行
 
-需要 Python 3.9+ 和两个依赖：
+需要 Python 3.9+ 和三个依赖（HEIC 支持由 pillow-heif 提供）：
 
 ```bat
 pip install -r requirements.txt
@@ -113,7 +126,7 @@ python main.py D:\a.jpg        :: 打开单张图片
 
 - 只要绿色版程序目录：双击 **`build_exe.bat`**，产物在 `dist\看图精灵\看图精灵.exe`，
   整个 `dist\看图精灵` 文件夹拷走即可在没装 Python 的电脑上运行。
-- 要**安装包**：`python tools/build_release.py`，产物是 `dist\看图精灵-Setup-1.1.0.exe`
+- 要**安装包**：`python tools/build_release.py`，产物是 `dist\看图精灵-Setup-1.2.0.exe`
   （发布时重命名为 `PicSprite-Setup-<版本>.exe`，避免中文文件名在下载链接里出错）
   （自带解压安装引擎，安装/卸载/快捷方式/文件关联全部自实现，不依赖 Inno Setup）。
 
@@ -130,9 +143,10 @@ python main.py D:\a.jpg        :: 打开单张图片
 | 水平 / 垂直翻转 | Ctrl+H / Ctrl+J | 撤销 / 重做 | Ctrl+Z / Ctrl+Y |
 | 缩略图墙 | Tab | 全屏 | F11 |
 | 打印 | Ctrl+P | 打印预览 | Ctrl+Shift+P |
-| 批量处理 | Ctrl+B | 幻灯片 | F6（Esc 退出） |
-| 重命名 / 删除 | F2 / Del | 设为壁纸 | Ctrl+Alt+W |
-| 设置 | Ctrl+, | 快捷键速查 | F1 |
+| 身份证打印 | Ctrl+Shift+I | 批量处理 | Ctrl+B |
+| 幻灯片 | F6（Esc 退出） | 设为壁纸 | Ctrl+Alt+W |
+| 重命名 / 删除 | F2 / Del | 设置 | Ctrl+, |
+| 快捷键速查 | F1 | — | — |
 
 ## 目录结构
 
@@ -155,6 +169,9 @@ ImageViewer/
 │  ├─ batch.py             批量处理逻辑
 │  ├─ printing.py          打印版面计算与绘制（打印 / 预览 / PDF 共用）
 │  ├─ printdialog.py       打印窗口：排版选项 + 分页预览 + 导出 PDF
+│  ├─ printerui.py         打印机选择 + 单/双面（打印与身份证共用）
+│  ├─ idcard.py            身份证识别裁剪与 A4 实际尺寸排版
+│  ├─ idcarddialog.py      身份证打印窗口（正反面、手动框选、导出）
 │  ├─ dialogs.py           另存为/压缩/尺寸/文字/属性/快捷键速查
 │  ├─ batchdialog.py       批量处理窗口
 │  ├─ settingsdialog.py    设置窗口
@@ -180,6 +197,7 @@ ImageViewer/
 - ICO 输出会自动补齐为正方形并按 16–256 多尺寸写入。
 - 涂鸦与文字是"烧录"进像素的，撤销可回退，但保存后需重新编辑。
 - 打印一批图片时，"整个文件夹"最多取前 50 张、"选中的图片"最多 100 张，避免一次解码过多图把内存吃满；长边会按张数自动降到 1600–4200px。
+- 身份证自动裁剪靠边缘与亮度反差判断，遇到「白卡片放在白纸上、且没有阴影」这类极端情况可能识别不准，可用「调整裁剪」手动框选。
 
 ## 自测
 
@@ -189,7 +207,10 @@ python tests/test_flow.py        :: 真实文件的保存、备份、重命名�
 python tests/test_gui.py         :: 界面主流程 + 截图
 python tests/test_dialogs.py     :: 批量转换/重命名/压缩/另存为 端到端
 python tests/test_print.py       :: 版面计算 + 导出 PDF 后逐像素核对位置/页数/图注
-python tests/test_print_gui.py   :: 打印对话框（分页、选项联动、预览）+ 截图
+python tests/test_print_gui.py   :: 打印对话框（分页、选项联动、打印机/双面）+ 截图
+python tests/test_idcard.py      :: 身份证自动裁剪 + A4 物理尺寸（PDF 回读量像素）
+python tests/test_idcard_gui.py  :: 身份证窗口（正反面、手动框选、份数）+ 截图
+python tests/test_heic.py        :: HEIC/HEIF 读取、缩略图、另存与压缩
 python tests/test_setup_silent.py:: 安装包静默安装 → 启动 → 卸载（用 dist 里的 exe）
 python tests/test_setup_gui.py   :: 安装向导图形流程（自动点「安装」，验证产物后清理）
 ```

@@ -23,3 +23,6 @@ _repo*.json
 _*.json
 _hdr.py
 _hdr.txt
+
+# 本地探测脚本
+tests/_probe_*.py

@@ -56,6 +56,13 @@ def _draw(p: QPainter, name: str) -> None:
         _arrow_head(p, (9.4, 9.4), 45)
         _stroke(p, [(19.4, 19.4), (14.6, 14.6)])
         _arrow_head(p, (14.6, 14.6), 225)
+    elif name == "print":
+        p.drawRect(QRectF(3.5, 8.5, 17, 8.5))               # 机身
+        _stroke(p, [(7, 8.5), (7, 3.5), (17, 3.5), (17, 8.5)], True)      # 进纸
+        _stroke(p, [(7, 13.5), (7, 20.5), (17, 20.5), (17, 13.5)], True)  # 出纸
+        _stroke(p, [(9.5, 16.2), (14.5, 16.2)])
+        _stroke(p, [(9.5, 18.3), (14.5, 18.3)])
+        p.drawPoint(QPointF(17.8, 11.2))
     elif name == "rename":
         _stroke(p, [(4, 20), (5.4, 15.4), (16.4, 4.4), (19.6, 7.6), (8.6, 18.6)], True)
         _stroke(p, [(14, 20), (21, 20)])

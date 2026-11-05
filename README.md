@@ -10,17 +10,17 @@
 
 ## 下载安装
 
-到 [Releases](https://github.com/mew5748-alt/PicSprite/releases/latest) 下载 **`PicSprite-Setup-1.0.0.exe`**，双击按向导安装即可，无需 Python 环境。
+到 [Releases](https://github.com/mew5748-alt/PicSprite/releases/latest) 下载 **`PicSprite-Setup-1.1.0.exe`**，双击按向导安装即可，无需 Python 环境。
 
 - 单个 exe 安装包，约 94 MB，安装后占用约 217 MB
 - 装到当前用户目录 `%LOCALAPPDATA%\Programs\PicSprite`，**不需要管理员权限**
 - 自带卸载程序（开始菜单「卸载看图精灵」或 设置 → 应用）
 - 可选把看图精灵加入图片的「打开方式」（不修改你的默认打开程序）
-- 静默安装：`PicSprite-Setup-1.0.0.exe /S`
+- 静默安装：`PicSprite-Setup-1.1.0.exe /S`
 
 ```powershell
 # 校验下载的安装包（值见 Release 里的 SHA256SUMS.txt）
-Get-FileHash .\PicSprite-Setup-1.0.0.exe -Algorithm SHA256
+Get-FileHash .\PicSprite-Setup-1.1.0.exe -Algorithm SHA256
 ```
 
 ## 功能一览
@@ -32,6 +32,16 @@ Get-FileHash .\PicSprite-Setup-1.0.0.exe -Algorithm SHA256
 - 自动按 EXIF 方向摆正手机照片；GIF 与多页 TIFF 可逐帧查看
 - 缩略图墙：异步加载 + 磁盘缓存，切回文件夹秒开；支持筛选与多种排序
 - 左侧目录树、右侧信息面板（尺寸/格式/体积/拍摄参数）、拖拽打开、最近文件夹记忆
+
+**打印**
+
+- 打印当前图片、选中的多张，或整个文件夹的全部图片
+- 排版：每页 1 / 2 / 4 / 6 / 9 张（按纸张方向自动选横排还是竖排）、可调页边距与图片间距
+- 缩放：适应区域（完整显示）/ 原始大小（不放大）/ 铺满区域（裁切）
+- 可勾选在每张图下打印文件名与拍摄日期
+- 对话框左侧是**所见即所得的分页预览**，翻页即可检查每一页，预览尺寸按打印机真实可打印区计算
+- 不需要打印机也能用：一键**导出为 PDF**，导出后会问你是否用系统默认程序打开
+- 直接调用系统打印机驱动，走的是 Windows 原生打印，不改动原图
 
 **编辑**
 
@@ -74,6 +84,10 @@ Get-FileHash .\PicSprite-Setup-1.0.0.exe -Algorithm SHA256
 | --- | --- |
 | ![另存为](tests/shots/05-saveas.png) | ![批量](tests/shots/06-batch.png) |
 
+| 打印（排版与分页预览） | 打印输出（每页 4 张，也可导出 PDF） |
+| --- | --- |
+| ![打印](tests/shots/print-02-4up.png) | ![打印输出](tests/shots/print-04-pdf.png) |
+
 | 设置（快捷键 / 右键菜单） | 右键菜单 |
 | --- | --- |
 | ![设置](tests/shots/07-settings.png) | ![右键菜单](tests/shots/08-menu.png) |
@@ -99,7 +113,7 @@ python main.py D:\a.jpg        :: 打开单张图片
 
 - 只要绿色版程序目录：双击 **`build_exe.bat`**，产物在 `dist\看图精灵\看图精灵.exe`，
   整个 `dist\看图精灵` 文件夹拷走即可在没装 Python 的电脑上运行。
-- 要**安装包**：`python tools/build_release.py`，产物是 `dist\看图精灵-Setup-1.0.0.exe`
+- 要**安装包**：`python tools/build_release.py`，产物是 `dist\看图精灵-Setup-1.1.0.exe`
   （发布时重命名为 `PicSprite-Setup-<版本>.exe`，避免中文文件名在下载链接里出错）
   （自带解压安装引擎，安装/卸载/快捷方式/文件关联全部自实现，不依赖 Inno Setup）。
 
@@ -115,6 +129,7 @@ python main.py D:\a.jpg        :: 打开单张图片
 | 向左 / 向右旋转 | Ctrl+L / Ctrl+Shift+R | 裁剪 / 涂鸦 / 文字 | C / D / T |
 | 水平 / 垂直翻转 | Ctrl+H / Ctrl+J | 撤销 / 重做 | Ctrl+Z / Ctrl+Y |
 | 缩略图墙 | Tab | 全屏 | F11 |
+| 打印 | Ctrl+P | 打印预览 | Ctrl+Shift+P |
 | 批量处理 | Ctrl+B | 幻灯片 | F6（Esc 退出） |
 | 重命名 / 删除 | F2 / Del | 设为壁纸 | Ctrl+Alt+W |
 | 设置 | Ctrl+, | 快捷键速查 | F1 |
@@ -138,6 +153,8 @@ ImageViewer/
 │  ├─ grid.py              缩略图墙（异步加载 + 缓存）
 │  ├─ thumbcache.py        缩略图磁盘缓存与 LRU 清理
 │  ├─ batch.py             批量处理逻辑
+│  ├─ printing.py          打印版面计算与绘制（打印 / 预览 / PDF 共用）
+│  ├─ printdialog.py       打印窗口：排版选项 + 分页预览 + 导出 PDF
 │  ├─ dialogs.py           另存为/压缩/尺寸/文字/属性/快捷键速查
 │  ├─ batchdialog.py       批量处理窗口
 │  ├─ settingsdialog.py    设置窗口
@@ -162,6 +179,7 @@ ImageViewer/
 - 批量处理为了稳妥采用主线程外的逐个处理，超大图（>100MP）会慢一些。
 - ICO 输出会自动补齐为正方形并按 16–256 多尺寸写入。
 - 涂鸦与文字是"烧录"进像素的，撤销可回退，但保存后需重新编辑。
+- 打印一批图片时，"整个文件夹"最多取前 50 张、"选中的图片"最多 100 张，避免一次解码过多图把内存吃满；长边会按张数自动降到 1600–4200px。
 
 ## 自测
 
@@ -170,6 +188,8 @@ python tests/test_core.py        :: 多格式读写 / 体积压缩 / 批量逻�
 python tests/test_flow.py        :: 真实文件的保存、备份、重命名、删除、快捷键
 python tests/test_gui.py         :: 界面主流程 + 截图
 python tests/test_dialogs.py     :: 批量转换/重命名/压缩/另存为 端到端
+python tests/test_print.py       :: 版面计算 + 导出 PDF 后逐像素核对位置/页数/图注
+python tests/test_print_gui.py   :: 打印对话框（分页、选项联动、预览）+ 截图
 python tests/test_setup_silent.py:: 安装包静默安装 → 启动 → 卸载（用 dist 里的 exe）
 python tests/test_setup_gui.py   :: 安装向导图形流程（自动点「安装」，验证产物后清理）
 ```

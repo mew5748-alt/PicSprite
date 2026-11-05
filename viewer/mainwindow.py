@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDockWidget,
                                QToolBar, QToolButton, QTreeView, QVBoxLayout,
                                QWidget, QColorDialog)
 
-from . import icons, imageio, util
+from . import icons, imageio, printing, util
 from .batch import sort_files
 from .batchdialog import BatchDialog
 from .canvas import MODE_CROP, MODE_DRAW, MODE_TEXT, MODE_VIEW, ImageCanvas
@@ -26,6 +26,8 @@ from .config import ACTION_MAP, ACTIONS, APP_NAME, APP_VERSION, cache_dir, setti
 from .dialogs import (ColorButton, CompressDialog, PropertiesDialog, ResizeDialog,
                       SaveAsDialog, ShortcutsDialog, TextDialog, about_text)
 from .grid import GridPage
+from .printdialog import PrintDialog
+from .printing import PrintItem, PrintOptions
 from .settingsdialog import SettingsDialog
 from .style import CANVAS_COLORS
 from .thumbcache import ThumbCache
@@ -35,7 +37,8 @@ MENU_ORDER = ["文件", "编辑", "图片", "视图", "工具", "帮助"]
 
 MENU_LAYOUT = {
     "文件": ["file.open", "file.open_folder", "-", "file.save", "file.save_as",
-             "file.compress", "-", "file.rename", "file.delete", "-",
+             "file.compress", "-", "file.print", "file.print_preview", "-",
+             "file.rename", "file.delete", "-",
              "file.properties", "-", "file.quit"],
     "编辑": ["edit.undo", "edit.redo", "-", "edit.crop", "edit.draw", "edit.text",
              "edit.resize", "-", "file.copy_image", "file.paste_image",
@@ -150,6 +153,8 @@ class MainWindow(QMainWindow):
             "file.save": self.act_save,
             "file.save_as": self.act_save_as,
             "file.compress": self.act_compress,
+            "file.print": self.act_print,
+            "file.print_preview": self.act_print_preview,
             "file.rename": self.act_rename,
             "file.delete": self.act_delete,
             "file.copy_image": self.act_copy_image,
@@ -1058,6 +1063,166 @@ class MainWindow(QMainWindow):
                 self.dirty = False
                 self._load(self.path)
 
+    # ================================================================== 打印
+    def _print_options(self) -> PrintOptions:
+        o = PrintOptions()
+        o.per_page = max(1, self.cfg.get_int("print/per_page", 1))
+        o.scale = str(self.cfg.get("print/scale", "fit") or "fit")
+        if o.scale not in ("fit", "shrink", "fill"):
+            o.scale = "fit"
+        try:
+            o.margin_mm = float(self.cfg.get("print/margin_mm", 6.0))
+        except (TypeError, ValueError):
+            o.margin_mm = 6.0
+        try:
+            o.gap_mm = float(self.cfg.get("print/gap_mm", 4.0))
+        except (TypeError, ValueError):
+            o.gap_mm = 4.0
+        o.show_title = self.cfg.get_bool("print/show_title", True)
+        o.show_date = self.cfg.get_bool("print/show_date", False)
+        return o
+
+    def _save_print_options(self, o: PrintOptions) -> None:
+        self.cfg.set("print/per_page", o.per_page)
+        self.cfg.set("print/scale", o.scale)
+        self.cfg.set("print/margin_mm", round(o.margin_mm, 1))
+        self.cfg.set("print/gap_mm", round(o.gap_mm, 1))
+        self.cfg.set("print/show_title", o.show_title)
+        self.cfg.set("print/show_date", o.show_date)
+
+    @staticmethod
+    def _print_date(loaded) -> str:
+        if loaded is None:
+            return ""
+        for key in ("拍摄时间", "拍摄日期", "DateTimeOriginal", "创建日期"):
+            v = (loaded.exif or {}).get(key)
+            if v:
+                return str(v)
+        if loaded.mtime:
+            return datetime.datetime.fromtimestamp(loaded.mtime).strftime("%Y-%m-%d")
+        return ""
+
+    @staticmethod
+    def _print_max_side(count: int) -> int:
+        """按张数控制内存：张数越多，单张解码得越小。"""
+        if count > 30:
+            return 1600
+        if count > 12:
+            return 2200
+        return 4200
+
+    def _print_item_from_current(self) -> List[PrintItem]:
+        if self.image is None:
+            return []
+        img = self.image
+        side = max(img.width(), img.height())
+        limit = 4200
+        if side > limit:
+            img = img.scaled(int(img.width() * limit / side), int(img.height() * limit / side),
+                             Qt.AspectRatioMode.KeepAspectRatio,
+                             Qt.TransformationMode.SmoothTransformation)
+        title = os.path.basename(self.path) if self.path else "剪贴板图片"
+        return [PrintItem(img, title, self._print_date(self.loaded))]
+
+    def _print_items_from_paths(self, paths: List[str], limit: int) -> List[PrintItem]:
+        paths = [p for p in paths if p][:limit]
+        max_side = self._print_max_side(len(paths))
+        items: List[PrintItem] = []
+        for path in paths:
+            loaded = imageio.load_image(path, max_frames=1)
+            img = loaded.image
+            if img is None:
+                continue
+            side = max(img.width(), img.height())
+            if side > max_side:
+                img = img.scaled(int(img.width() * max_side / side),
+                                 int(img.height() * max_side / side),
+                                 Qt.AspectRatioMode.KeepAspectRatio,
+                                 Qt.TransformationMode.SmoothTransformation)
+            items.append(PrintItem(img, os.path.basename(path), self._print_date(loaded)))
+        return items
+
+    def _print_scopes(self):
+        """返回 [(键, 文字, 取数据函数)]，按当前界面状态动态给出可打印范围。"""
+        scopes = []
+        in_grid = self.stack.currentWidget() is self.grid_page
+        picked = self.grid_page.selected_paths() if in_grid else []
+
+        if self.image is not None:
+            scopes.append(("current", "当前图片", self._print_item_from_current))
+        if picked and len(picked) > 1:
+            scopes.append(("selected",
+                           f"选中的 {len(picked)} 张图片",
+                           lambda p=list(picked): self._print_items_from_paths(p, 100)))
+        if self.files and len(self.files) > 1:
+            n = min(len(self.files), 50)
+            label = f"整个文件夹（{len(self.files)} 张）" if len(self.files) <= 50 \
+                else f"整个文件夹（前 50 张，共 {len(self.files)} 张）"
+            scopes.append(("folder", label,
+                           lambda f=list(self.files): self._print_items_from_paths(f, 50)))
+        return scopes
+
+    def _make_printer(self, opts: PrintOptions):
+        from PySide6.QtPrintSupport import QPrinter
+        printer = QPrinter(QPrinter.PrinterMode.HighResolution)
+        printing.apply_margins(printer, opts.margin_mm)
+        return printer
+
+    def act_print(self) -> None:
+        scopes = self._print_scopes()
+        if not scopes:
+            self._toast("请先打开一张图片")
+            return
+        self._bake_if_needed()          # 打印所见即所得：先把临时旋转/翻转落到像素上
+        opts = self._print_options()
+        printer = self._make_printer(opts)
+        if not printer.isValid():
+            # 没有打印机也让对话框开着：用户可以在这里「导出为 PDF」
+            QMessageBox.warning(
+                self, "没有可用的打印机",
+                "没有找到可用的打印机。\n\n"
+                "你可以点「打印机设置」换一台打印机，"
+                "或者直接用「导出为 PDF」保存成文件。")
+        dlg = PrintDialog(printer, scopes, opts, self)
+        if dlg.exec() != PrintDialog.DialogCode.Accepted:
+            self._save_print_options(dlg.opts)
+            return
+        self._save_print_options(dlg.opts)
+        items = dlg.items
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            pages = printing.draw_document(printer, items, dlg.opts)
+        except Exception as exc:                              # noqa: BLE001
+            QApplication.restoreOverrideCursor()
+            QMessageBox.critical(self, "打印失败", str(exc))
+            return
+        QApplication.restoreOverrideCursor()
+        self._toast(f"已发送到打印机 · {len(items)} 张 / {pages} 页")
+
+    def act_print_preview(self) -> None:
+        from PySide6.QtPrintSupport import QPrintPreviewDialog
+        scopes = self._print_scopes()
+        if not scopes:
+            self._toast("请先打开一张图片")
+            return
+        self._bake_if_needed()
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            items = scopes[0][2]()
+        finally:
+            QApplication.restoreOverrideCursor()
+        if not items:
+            self._toast("没有可打印的图片")
+            return
+        opts = self._print_options()
+        printer = self._make_printer(opts)
+        dlg = QPrintPreviewDialog(printer, self)
+        dlg.setWindowTitle("打印预览")
+        dlg.resize(1020, 780)
+        dlg.paintRequested.connect(
+            lambda pr: printing.draw_document(pr, items, opts))
+        dlg.exec()
+
     def _refresh_after_write(self) -> None:
         self.files = list_images(self.folder) if self.folder else []
         self.grid_page.set_folder(self.folder, self.files)
@@ -1339,7 +1504,7 @@ class MainWindow(QMainWindow):
                     "image.flip_h", "image.flip_v", "image.rot_left_perm",
                     "image.rot_right_perm", "image.flip_h_perm", "image.flip_v_perm",
                     "tools.wallpaper", "tools.reveal", "view.zoom_in", "view.zoom_out",
-                    "view.fit", "view.actual"):
+                    "view.fit", "view.actual", "file.print", "file.print_preview"):
             self.actions[aid].setEnabled(has_img)
         self.actions["edit.undo"].setEnabled(bool(self.undo))
         self.actions["edit.redo"].setEnabled(bool(self.redo))

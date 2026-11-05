@@ -82,7 +82,9 @@ print("[2] 运行已安装的程序")
 launched = subprocess.Popen([os.path.join(TARGET, f"{APP_NAME}.exe")])
 time.sleep(6)
 check("程序可启动", launched.poll() is None)
-launched.kill()
+# onefile 程序会派生真正干活的子进程，只 kill 父进程会留下孤儿占住安装目录
+subprocess.run(["taskkill", "/F", "/T", "/PID", str(launched.pid)],
+               capture_output=True, creationflags=NO_WINDOW)
 try:
     launched.wait(5)
 except Exception:
@@ -92,12 +94,12 @@ time.sleep(1)
 # ---------------------------------------------------------------- 卸载
 print("[3] 静默卸载")
 subprocess.run([os.path.join(TARGET, "uninstall.exe"), "/uninstall", "/S"], timeout=120)
+link = os.path.join(STARTMENU, f"{APP_NAME}.lnk")
 deadline = time.time() + 30
-while time.time() < deadline and os.path.isdir(TARGET):
+while time.time() < deadline and (os.path.isdir(TARGET) or os.path.exists(link)):
     time.sleep(1)
 check("安装目录已删除（延迟清理）", not os.path.isdir(TARGET))
-check("开始菜单快捷方式已清理",
-      not os.path.exists(os.path.join(STARTMENU, f"{APP_NAME}.lnk")))
+check("开始菜单快捷方式已清理", not os.path.exists(link))
 check("注册表卸载项已清理", not key_exists(UNINST_KEY))
 check("打开方式注册项已清理",
       not key_exists(r"Software\Classes\PicSprite.Image"))

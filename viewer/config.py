@@ -12,7 +12,7 @@ from PySide6.QtCore import QSettings
 APP_NAME = "看图精灵"
 APP_ID = "PicSprite"
 ORGANIZATION = "PicSprite"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 
 # ---------------------------------------------------------------- 路径
 
@@ -63,6 +63,8 @@ ACTIONS: List[ActionDef] = [
     ActionDef("file.save", "保存", "Ctrl+S", CAT_FILE, True, "save", "将当前编辑保存到原文件"),
     ActionDef("file.save_as", "另存为…", "Ctrl+Shift+S", CAT_FILE, True, "saveas", "转换格式 / 调整尺寸 / 控制体积"),
     ActionDef("file.compress", "压缩到指定大小…", "Ctrl+Alt+C", CAT_FILE, True, "compress", "压到指定 KB 大小"),
+    ActionDef("file.print", "打印…", "Ctrl+P", CAT_FILE, True, "print", "打印当前图片 / 选中的图片，可导出 PDF"),
+    ActionDef("file.print_preview", "打印预览…", "Ctrl+Shift+P", CAT_FILE, False, "print", "整页预览效果，可缩放翻页"),
     ActionDef("file.rename", "重命名…", "F2", CAT_FILE, True, "rename", "重命名当前图片"),
     ActionDef("file.delete", "删除到回收站", "Del", CAT_FILE, True, "delete", "删除当前图片"),
     ActionDef("file.copy_image", "复制图片", "Ctrl+C", CAT_FILE, True, "copy", "把当前图片复制到剪贴板"),
@@ -136,7 +138,7 @@ for _a in ACTIONS:
 
 # 右键菜单默认顺序（按使用频率）
 DEFAULT_CONTEXT = [
-    "file.open", "file.save", "file.save_as", "file.compress",
+    "file.open", "file.save", "file.save_as", "file.compress", "file.print",
     "edit.undo", "edit.redo", "edit.crop", "edit.draw", "edit.text",
     "image.rot_left", "image.rot_right", "image.flip_h", "image.flip_v",
     "file.rename", "file.delete", "file.copy_image", "file.copy_path",
@@ -162,6 +164,13 @@ DEFAULTS = {
     "view/canvas_bg": "dark",
     "view/checkerboard": True,
     "cache/max_mb": 800,
+    # 打印偏好
+    "print/per_page": 1,
+    "print/scale": "fit",
+    "print/margin_mm": 6.0,
+    "print/gap_mm": 4.0,
+    "print/show_title": True,
+    "print/show_date": False,
     "recent/files": "[]",
     "recent/folders": "[]",
 }

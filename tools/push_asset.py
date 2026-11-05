@@ -1,21 +1,41 @@
 # -*- coding: utf-8 -*-
-"""上传 Release 资产（先删同名旧资产，再传新文件）。
+"""上传 Release 资产（先删同名旧资产，再传新文件）；版本对应的 Release 不存在时自动建。
 
 用法：python tools/push_asset.py <file> [<file> ...]
+令牌：优先读环境变量 GH_TOKEN，没有就用 git 里已缓存的 github.com 凭据。
 """
 from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
 
-TOKEN = os.environ.get("GH_TOKEN", "")
 OWNER, REPO = "mew5748-alt", "PicSprite"
-TAG = "v1.0.0"
+TAG = "v1.1.0"
 API = "https://api.github.com"
+
+
+def _token() -> str:
+    tok = os.environ.get("GH_TOKEN", "").strip()
+    if tok:
+        return tok
+    try:
+        out = subprocess.run(["git", "credential", "fill"],
+                             input="protocol=https\nhost=github.com\n\n",
+                             capture_output=True, text=True, timeout=60)
+        for line in out.stdout.splitlines():
+            if line.startswith("password="):
+                return line.split("=", 1)[1].strip()
+    except Exception:                                          # noqa: BLE001
+        pass
+    return ""
+
+
+TOKEN = _token()
 
 
 def req(method: str, url: str, data=None, ctype: str = "application/json"):
@@ -54,14 +74,28 @@ def _parse(raw: bytes):
 
 def release_id() -> int:
     code, d = req("GET", f"{API}/repos/{OWNER}/{REPO}/releases/tags/{TAG}")
-    if code != 200:
+    if code == 200:
+        return d["id"]
+    if code != 404:
         raise SystemExit(f"取 Release 失败 {code}: {d}")
+    # 还没有这个版本，就地建一个
+    notes = os.environ.get("GH_NOTES", "").strip() or TAG
+    code, d = req("POST", f"{API}/repos/{OWNER}/{REPO}/releases", {
+        "tag_name": TAG,
+        "name": TAG,
+        "body": notes,
+        "draft": False,
+        "prerelease": False,
+    })
+    if code not in (200, 201):
+        raise SystemExit(f"创建 Release 失败 {code}: {d}")
+    print(f"已创建 Release {TAG}")
     return d["id"]
 
 
 def main() -> int:
     if not TOKEN:
-        raise SystemExit("缺少 GH_TOKEN")
+        raise SystemExit("缺少令牌：设 GH_TOKEN，或先 git push 一次让凭据进缓存")
     rid = release_id()
     print(f"release id = {rid}")
 

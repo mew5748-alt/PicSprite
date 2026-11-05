@@ -13,11 +13,12 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 import zipfile
 
 APP_NAME = "看图精灵"
 APP_ID = "PicSprite"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 APP_PUBLISHER = "PicSprite"
 APP_EXE = APP_NAME + ".exe"
 CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
@@ -251,19 +252,36 @@ def create_shortcuts(app_dir: str, desk: bool, menu: bool) -> None:
                       "卸载看图精灵")
 
 
-def remove_shortcuts() -> None:
-    for p in (os.path.join(desktop_dir(), APP_NAME + ".lnk"),
-              os.path.join(startmenu_dir(), APP_NAME + ".lnk"),
-              os.path.join(startmenu_dir(), "卸载看图精灵.lnk")):
-        try:
-            if os.path.exists(p):
+def shortcut_paths() -> list:
+    return [os.path.join(desktop_dir(), APP_NAME + ".lnk"),
+            os.path.join(startmenu_dir(), APP_NAME + ".lnk"),
+            os.path.join(startmenu_dir(), "卸载看图精灵.lnk")]
+
+
+def remove_shortcuts() -> list:
+    """删快捷方式，返回没删掉的路径。
+
+    资源管理器正在刷新开始菜单时会短暂占用 .lnk，直接删会失败一次就留下残留，
+    所以这里重试几轮；仍然失败的交给卸载后的延迟清理批处理兜底。
+    """
+    left = []
+    for p in shortcut_paths():
+        for _ in range(4):
+            try:
+                if not os.path.exists(p):
+                    break
                 os.remove(p)
-        except OSError:
-            pass
+            except OSError:
+                time.sleep(0.2)
+            else:
+                break
+        if os.path.exists(p):
+            left.append(p)
+    return left
 
 
 def do_uninstall(app_dir: str) -> None:
-    remove_shortcuts()
+    left = remove_shortcuts()
     unregister(app_dir)
     if os.path.isdir(app_dir):
         for entry in list(os.scandir(app_dir)):
@@ -274,21 +292,24 @@ def do_uninstall(app_dir: str) -> None:
                     os.remove(entry.path)
             except OSError:
                 pass
-    _schedule_cleanup(app_dir)
+    _schedule_cleanup(app_dir, left)
 
 
-def _schedule_cleanup(app_dir: str) -> None:
+def _schedule_cleanup(app_dir: str, extras: list = ()) -> None:
     """用批处理循环重试删除目录（卸载器自己还在运行，文件被占用）。
 
     cmd 按系统 ANSI 代码页读取批处理，所以用 mbcs 写盘，避免中文路径乱码。
+    extras 是卸载时没能删掉的快捷方式，一并在这里重试。
     """
     import tempfile
     bat = os.path.join(tempfile.gettempdir(), f"picsprite_uninst_{os.getpid()}.bat")
+    dels = "".join(f'del /f /q "{p}" 2>nul\r\n' for p in extras)
     body = (
         "@echo off\r\n"
         "set /a n=0\r\n"
         ":retry\r\n"
         "ping -n 2 127.0.0.1 >nul\r\n"
+        f"{dels}"
         f'rmdir /s /q "{app_dir}" 2>nul\r\n'
         f'if not exist "{app_dir}" goto done\r\n'
         "set /a n+=1\r\n"

@@ -47,6 +47,15 @@ def read_value(path: str, name: str) -> str:
         return ""
 
 
+def value_exists(path: str, name: str) -> bool:
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, path) as k:
+            winreg.QueryValueEx(k, name)
+            return True
+    except OSError:
+        return False
+
+
 def procs(name: str) -> int:
     out = subprocess.run(["tasklist", "/FI", f"IMAGENAME eq {name}", "/NH"],
                          capture_output=True, creationflags=NO_WINDOW)
@@ -87,6 +96,14 @@ check("版本号写入", read_value(UNINST_KEY, "DisplayVersion") == APP_VERSION
       read_value(UNINST_KEY, "DisplayVersion"))
 size_kb = int(read_value(UNINST_KEY, "EstimatedSize") or 0)
 check("安装体积已统计", size_kb > 50_000, f"{size_kb / 1024:.0f} MB")
+
+# 关联过的扩展名都要出现在“打开方式”候选里。HEIC 曾经漏注册，导致双击打不开，
+# 加这条回归检查，避免再漏
+for _ext in (".jpg", ".png", ".heic", ".heif"):
+    _path = rf"Software\Classes\{_ext}\OpenWithProgids"
+    check(f"打开方式含 {_ext}", value_exists(_path, "PicSprite.Image"))
+check("ProgID 声明支持 HEIC",
+      value_exists(r"Software\Classes\PicSprite.Image\SupportedTypes", ".heic"))
 print(f"    耗时 {time.time() - t0:.1f}s\n")
 
 # ---------------------------------------------------------------- 运行
@@ -115,6 +132,8 @@ check("开始菜单快捷方式已清理", not os.path.exists(link))
 check("注册表卸载项已清理", not key_exists(UNINST_KEY))
 check("打开方式注册项已清理",
       not key_exists(r"Software\Classes\PicSprite.Image"))
+check("HEIC 打开方式项已清理",
+      not value_exists(r"Software\Classes\.heic\OpenWithProgids", "PicSprite.Image"))
 
 print(f"\n通过 {len(passed)} 项，失败 {len(failed)} 项")
 if failed:

@@ -4,7 +4,8 @@
 单独打包成一个 exe，内部携带应用全部文件（payload.zip）。
 支持：
     看图精灵-Setup.exe              图形安装向导
-    看图精灵-Setup.exe /S           静默安装（默认目录 + 开始菜单快捷方式）
+    看图精灵-Setup.exe /S           静默安装（默认目录 + 开始菜单快捷方式 + 打开方式关联）
+    看图精灵-Setup.exe /S /noassoc  静默安装，但不写“打开方式”注册项
     看图精灵-Setup.exe /uninstall   图形卸载（安装目录下的 uninstall.exe 是它自己的副本）
 """
 from __future__ import annotations
@@ -18,12 +19,13 @@ import zipfile
 
 APP_NAME = "看图精灵"
 APP_ID = "PicSprite"
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.2.1"
 APP_PUBLISHER = "PicSprite"
 APP_EXE = APP_NAME + ".exe"
 CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
-IMAGE_EXTS = [".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp", ".tif", ".tiff", ".ico"]
+IMAGE_EXTS = [".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp", ".tif", ".tiff", ".ico",
+              ".heic", ".heif"]
 
 
 # --------------------------------------------------------------------------- #
@@ -664,9 +666,11 @@ def main() -> int:
         return run_uninstall_gui()
     if silent:
         target = default_dir()
+        # 静默安装默认与向导一致（勾选"加入打开方式"），需要纯净安装可加 /noassoc
+        assoc = not ({"noassoc", "no-assoc"} & flags)
         do_install(target)
         create_shortcuts(target, False, True)
-        register(target, False)
+        register(target, assoc)
         return 0
     return run_gui()
 

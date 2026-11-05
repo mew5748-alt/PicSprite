@@ -22,11 +22,13 @@ def card_image(w=856, h=540, back=False):
     except Exception:
         font = big = ImageFont.load_default()
     if back:
-        d.text((60, 40), "中华人民共和国", font=big, fill=(200, 60, 60))
-        d.text((60, 110), "居民身份证", font=big, fill=(60, 60, 60))
-        d.text((60, 220), "签发机关  某某市公安局", font=font, fill=(70, 70, 70))
-        d.text((60, 290), "有效期限  2018.01.01-2038.01.01", font=font, fill=(70, 70, 70))
-        d.ellipse((w - 240, 150, w - 60, 330), outline=(220, 180, 90), width=8)
+        # 真实的国徽面：国徽在左上，红色标题在其右侧，下方是签发机关与有效期
+        d.ellipse((70, 110, 260, 300), outline=(190, 46, 46), width=9)
+        d.ellipse((108, 148, 222, 262), outline=(206, 66, 60), width=4)
+        d.text((300, 150), "中华人民共和国", font=big, fill=(198, 48, 48))
+        d.text((300, 218), "居民身份证", font=big, fill=(60, 60, 60))
+        d.text((70, 370), "签发机关  某某市公安局", font=font, fill=(70, 70, 70))
+        d.text((70, 440), "有效期限  2018.01.01-2038.01.01", font=font, fill=(70, 70, 70))
     else:
         d.text((60, 40), "姓名  张小明", font=big, fill=(40, 40, 40))
         d.text((60, 110), "性别  男    民族  汉", font=font, fill=(60, 60, 60))
@@ -54,10 +56,10 @@ def desk(w, h, dark=(120, 96, 74)):
 def place(bg, card, angle, cx, cy, scale=1.0):
     c = card.resize((int(card.width * scale), int(card.height * scale)), Image.LANCZOS)
     c = c.convert("RGBA").rotate(angle, expand=True, resample=Image.BICUBIC, fillcolor=(0, 0, 0, 0))
-    # 阴影
+    # 阴影：真实拍摄时卡片边缘会投出一条明显的暗边，卡片边界主要靠它才能看到
     sh = Image.new("RGBA", (c.width + 40, c.height + 40), (0, 0, 0, 0))
-    sh.paste(Image.new("RGBA", c.size, (0, 0, 0, 90)), (20, 20), c)
-    sh = sh.filter(ImageFilter.GaussianBlur(9))
+    sh.paste(Image.new("RGBA", c.size, (0, 0, 0, 150)), (20, 20), c)
+    sh = sh.filter(ImageFilter.GaussianBlur(4))
     bg.paste(sh, (int(cx - c.width / 2 - 20 + 6), int(cy - c.height / 2 - 20 + 8)), sh)
     bg.paste(c, (int(cx - c.width / 2), int(cy - c.height / 2)), c)
 

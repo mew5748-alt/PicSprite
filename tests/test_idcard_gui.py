@@ -6,7 +6,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from PySide6.QtCore import QPointF, QRectF, QTimer
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QTransform
 from PySide6.QtWidgets import QApplication
 
 from viewer import icons, imageio
@@ -85,9 +85,13 @@ def step1():
           dlg.printer.duplex() == QPrinter.DuplexMode.DuplexLongSide,
           str(dlg.printer.duplex()))
 
-    print("\n[4] 手动调整裁剪")
     dlg.copies_spin.setValue(1)
     dlg.layout_box.setCurrentIndex(dlg.layout_box.findData("vertical"))
+    QTimer.singleShot(300, step_rotate)
+
+
+def step_crop_start():
+    print("\n[5] 手动调整裁剪")
     crop_dlg = CropDialog(front, dlg.slot_front.box, dlg)
     crop_dlg.resize(820, 620)
     crop_dlg.show()
@@ -116,8 +120,65 @@ def step_crop(crop_dlg):
     QTimer.singleShot(300, step_final)
 
 
+def _thumb(q):
+    return list(imageio.pil_from_qimage(q).convert("L").resize((120, 76)).tobytes())
+
+
+def _diff(a, b):
+    return sum(abs(x - y) for x, y in zip(a, b)) / float(len(a))
+
+
+def step_rotate():
+    print("\n[4] 旋转")
+    from viewer import idcard
+    from viewer.idcard import CardBox
+
+    # 基准：这张图正常放着的自动裁剪结果（第 4 步把正面手动框改小了，不能用它）
+    base_crop, _ = idcard.auto_crop(front)
+
+    # 把正面这张图倒过来，模拟「手机反着拍的一张身份证」
+    turned = front.transformed(QTransform().rotate(180))
+    dlg.slot_back.set_image(turned, "翻转.jpg")
+    dlg._refresh_preview()
+    check("倒置的图被自动转正", dlg.slot_back.rotation == 180, str(dlg.slot_back.rotation))
+    d = _diff(_thumb(dlg.slot_back.crop()), _thumb(base_crop))
+    check("转正后和正放的同一张图基本一致", d < 16, f"平均差 {d:.1f}")
+    check("旋转按钮可用", dlg.slot_back.btn_cw.isEnabled()
+          and dlg.slot_back.btn_ccw.isEnabled())
+    check("状态里写明了旋转角度", "180" in dlg.slot_back.lb_state.text(),
+          dlg.slot_back.lb_state.text())
+    shot(dlg, "idcard-05-rotated.png")
+
+    r0 = dlg.slot_back.rotation
+    before = _thumb(dlg.slot_back.crop())
+    dlg.slot_back.btn_cw.click()
+    check("点顺时针 +90", dlg.slot_back.rotation == (r0 + 90) % 360,
+          str(dlg.slot_back.rotation))
+    check("转了之后画面真的变了", _diff(before, _thumb(dlg.slot_back.crop())) > 10)
+    dlg.slot_back.btn_ccw.click()
+    check("点逆时针转回来", dlg.slot_back.rotation == r0, str(dlg.slot_back.rotation))
+    check("转回来画面复原", _diff(before, _thumb(dlg.slot_back.crop())) < 1.0)
+
+    dlg.slot_back.btn_ccw.click()
+    dlg.slot_back.btn_ccw.click()
+    check("连按两次逆时针归零", dlg.slot_back.rotation == 0, str(dlg.slot_back.rotation))
+
+    # 手动框选之后，旋转状态要保留下来
+    dlg.slot_back.set_image(turned, "翻转.jpg")
+    box = dlg.slot_back.box
+    dlg.slot_back.set_box(CardBox(box.cx, box.cy, box.w, box.h, box.angle))
+    check("重新框选后旋转保持", dlg.slot_back.rotation == 180,
+          str(dlg.slot_back.rotation))
+
+    # 换回正常的反面，后面的打印/导出用
+    dlg.slot_back.set_image(back, back_path)
+    dlg._refresh_preview()
+    check("恢复正常反面后不再旋转", dlg.slot_back.rotation == 0)
+    QTimer.singleShot(300, step_crop_start)
+
+
 def step_final():
-    print("\n[5] 打印入口")
+    print("\n[6] 打印入口")
     shot(dlg, "idcard-04-after-crop.png")
     dlg._do_print()
     check("点打印后对话框接受", dlg.result() == IdCardDialog.DialogCode.Accepted)
@@ -128,7 +189,7 @@ def step_final():
 
 def step_export():
     """导出 PDF 并渲染第一页，作为 README 的效果图（中间 PDF 放临时目录）。"""
-    print("\n[6] 导出 PDF 效果图")
+    print("\n[7] 导出 PDF 效果图")
     import tempfile
 
     from PySide6.QtCore import QSize

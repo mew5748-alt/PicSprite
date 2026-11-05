@@ -19,7 +19,7 @@ from typing import List, Optional, Sequence, Tuple
 
 from PIL import Image, ImageFilter
 from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QColor, QImage, QPainter, QPen
+from PySide6.QtGui import QColor, QImage, QPainter, QPen, QTransform
 from PySide6.QtPrintSupport import QPrinter
 
 from . import imageio, printing
@@ -32,7 +32,11 @@ MAX_SIDE = 400
 
 @dataclass
 class CardBox:
-    """卡片位置。cx/cy 为中心，w/h 沿卡片自身方向，angle 为倾斜角（度）。"""
+    """卡片位置。cx/cy 为中心，w/h 沿卡片自身方向，angle 为倾斜角（度）。
+
+    rotation 是裁出来之后还要顺时针转的角度（0/90/180/270）。倾斜角只能把卡片
+    「摆平」，摆平之后是正着还是倒着，由它决定。
+    """
 
     cx: float
     cy: float
@@ -41,6 +45,7 @@ class CardBox:
     angle: float = 0.0
     confidence: float = 0.0
     auto: bool = True
+    rotation: int = 0
 
     def bounds(self) -> QRectF:
         """外接矩形（源图像素）。"""
@@ -471,8 +476,109 @@ def center_box(qimg: QImage) -> CardBox:
     return CardBox(W / 2, H / 2, bw, bh, 0.0, 0.0, auto=False)
 
 
+# ---------------------------------------------------------------- 朝向
+
+UPRIGHT_SIDE = 200
+"""判断朝向时把卡片缩到 200 px 宽，文字会被平均掉，只剩成片的图案。"""
+
+
+def _solid_blob(pil: Image.Image):
+    """找卡片里「最实心的一块内容」，返回 (cx, cy, w, h, fill)，坐标已归一化。
+
+    身份证上唯一符合「块大、填充率高、竖长」的区域就是头像照；文字因为笔画稀疏，
+    填充率很低，会被过滤掉。缩小的同时顺带把文字糊掉了，所以不会误抓文字行。
+    """
+    w, h = pil.size
+    if w < 16 or h < 16:
+        return None
+    W = UPRIGHT_SIDE
+    H = max(12, int(round(W * h / float(w))))
+    g = pil.convert("L").resize((W, H), Image.BILINEAR)
+    data = g.tobytes()
+    vals = sorted(data)
+    med = vals[len(vals) // 2]
+    thr = med - max(16, int(med * 0.09))
+    mask = bytearray(1 if v < thr else 0 for v in data)
+    comps = _components(mask, W, H, max(16, int(W * H * 0.003)))
+    best = None
+    for comp in comps[:5]:
+        xs = [i % W for i in comp]
+        ys = [i // W for i in comp]
+        x0, x1 = min(xs), max(xs)
+        y0, y1 = min(ys), max(ys)
+        bw, bh = x1 - x0 + 1, y1 - y0 + 1
+        fill = len(comp) / float(bw * bh)
+        area = len(comp) / float(W * H)
+        if area < 0.02 or fill < 0.42:
+            continue
+        if best is None or area * fill > best[0]:
+            best = (area * fill, ((x0 + x1) / 2.0 / W, (y0 + y1) / 2.0 / H,
+                                  bw / float(W), bh / float(H), fill))
+    return best[1] if best else None
+
+
+def _red_centroid(pil: Image.Image):
+    """红色像素的质心 (cx, cy, 占比)。国徽和「中华人民共和国」都是红的，都在左上。"""
+    w, h = pil.size
+    if w < 16 or h < 16:
+        return None
+    W = 160
+    H = max(12, int(round(W * h / float(w))))
+    small = pil.convert("RGB").resize((W, H), Image.BILINEAR)
+    px = small.load()
+    sum_x = sum_y = n = 0
+    for y in range(H):
+        for x in range(W):
+            r, g, b = px[x, y]
+            if r > 110 and r - g > 45 and r - b > 45:
+                sum_x += x
+                sum_y += y
+                n += 1
+    if n < W * H * 0.004:
+        return None
+    return sum_x / n / W, sum_y / n / H, n / float(W * H)
+
+
+def detect_upright(qimg: QImage) -> int:
+    """判断摆平后的卡片是不是上下颠倒，返回 0（正）或 180（要翻过来）。
+
+    只认两条最硬的线索，拿不准就不动，留给界面上的手动旋转：
+      1. 人像面的头像：一大块竖长的实心区域，正向时在卡片右半边；
+      2. 国徽面的红色：国徽和红字都在左上，正向时质心明显偏上。
+    黑白扫描件两条都用不上（返回 0），但那种图通常本来就是正的。
+    """
+    if qimg is None or qimg.isNull() or qimg.width() < 40 or qimg.height() < 40:
+        return 0
+    pil = imageio.pil_from_qimage(qimg).convert("RGB")
+
+    blob = _solid_blob(pil)
+    if blob is not None:
+        cx, _cy, bw, bh, _fill = blob
+        # 竖长的实心块才算头像；圆形（国徽）位置规律相反，不能套用这条
+        if bh > 0 and bw / bh < 0.85:
+            return 0 if cx > 0.5 else 180
+
+    red = _red_centroid(pil)
+    if red is not None:
+        return 0 if red[1] < 0.5 else 180
+    return 0
+
+
+def rotate_card(img: QImage, delta: int) -> QImage:
+    """把裁好的卡片顺时针再转 delta 度（90 的倍数）。90° 的倍数是精确像素重排，无画质损失。"""
+    if img is None or img.isNull():
+        return img
+    d = int(delta) % 360
+    if not d:
+        return img
+    return img.transformed(QTransform().rotate(d),
+                           Qt.TransformationMode.SmoothTransformation)
+
+
+# ---------------------------------------------------------------- 裁剪
+
 def crop_card(qimg: QImage, box: CardBox, max_side: int = 2600) -> QImage:
-    """按 CardBox 裁剪出卡片；倾斜的先转正，竖版再转成横版。"""
+    """按 CardBox 裁剪出卡片：先转正倾斜、再把竖版摆成横版、最后应用 rotation。"""
     if qimg.isNull():
         return qimg
     pil = imageio.pil_from_qimage(qimg).convert("RGB")
@@ -492,14 +598,23 @@ def crop_card(qimg: QImage, box: CardBox, max_side: int = 2600) -> QImage:
     crop = pil.crop((x0, y0, x1, y1))
     if crop.width < crop.height:
         crop = crop.rotate(-90, expand=True)
+    extra = int(getattr(box, "rotation", 0) or 0) % 360
+    if extra:
+        crop = crop.rotate(-extra, expand=True)      # 顺时针转 extra 度
     if max(crop.size) > max_side:
         crop.thumbnail((max_side, max_side), Image.LANCZOS)
     return imageio.qimage_from_pil(crop)
 
 
 def auto_crop(qimg: QImage) -> Tuple[QImage, CardBox]:
+    """自动识别 + 自动摆正，返回 (卡片图, 盒)。盒里带着实际用到的 rotation。"""
     box = detect_card_box(qimg)
-    return crop_card(qimg, box), box
+    crop = crop_card(qimg, box)
+    turn = detect_upright(crop)
+    if turn:
+        box.rotation = turn
+        crop = crop_card(qimg, box)
+    return crop, box
 
 
 # ---------------------------------------------------------------- 版面

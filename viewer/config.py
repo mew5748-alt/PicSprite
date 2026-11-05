@@ -12,7 +12,7 @@ from PySide6.QtCore import QSettings
 APP_NAME = "看图精灵"
 APP_ID = "PicSprite"
 ORGANIZATION = "PicSprite"
-APP_VERSION = "1.2.1"
+APP_VERSION = "1.2.2"
 
 # ---------------------------------------------------------------- 路径
 

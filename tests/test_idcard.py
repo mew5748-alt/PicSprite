@@ -217,6 +217,68 @@ check("双面短边", pd.duplex() == QPrinter.DuplexMode.DuplexShortSide)
 printing.apply_duplex(pd, "unknown")
 check("未知值不报错", pd.isValid() is not None)
 
+# ---------------------------------------------------------------- 5. 朝向与旋转
+print("\n[5] 朝向与旋转")
+from PIL import Image                                       # noqa: E402
+
+rot_dir = os.path.join(tmp, "rot")
+os.makedirs(rot_dir, exist_ok=True)
+
+
+def thumb(q):
+    return list(imageio.pil_from_qimage(q).convert("L").resize((120, 76)).tobytes())
+
+
+def diff(a, b):
+    return sum(abs(x - y) for x, y in zip(a, b)) / float(len(a))
+
+
+check("正向的正面不再旋转", idcard.detect_upright(
+    idcard.auto_crop(front_img)[0]) == 0)
+check("正向的反面不再旋转", idcard.detect_upright(
+    idcard.auto_crop(back_img)[0]) == 0)
+
+for name in ("id-front", "id-back"):
+    src = Image.open(os.path.join(SAMPLES, f"{name}.jpg")).convert("RGB")
+    base = None
+    for deg in (0, 90, 180, 270):
+        p = os.path.join(rot_dir, f"{name}-{deg}.jpg")
+        (src.rotate(-deg, expand=True) if deg else src).save(p, quality=93)
+        crop, box = idcard.auto_crop(imageio.load_qimage(p))
+        check(f"{name} 转 {deg}° 后仍是横向卡片", crop.width() > crop.height(),
+              f"{crop.width()}x{crop.height()}")
+        check(f"{name} 转 {deg}° 后摆正结果可复现", idcard.detect_upright(crop) == 0,
+              f"rotation={box.rotation}")
+        t = thumb(crop)
+        if deg == 0:
+            base = t
+        else:
+            d = diff(base, t)
+            # 摆正后应当和正立的基准图基本一致；方向转错时会到 20 以上
+            check(f"{name} 转 {deg}° 后内容是正立的", d < 15, f"与基准平均差 {d:.1f}")
+
+# 把已经摆正的结果再人为转 180，差异必须明显变大，否则上面的判据没有区分力
+sample = idcard.auto_crop(imageio.load_qimage(os.path.join(rot_dir, "id-front-180.jpg")))[0]
+check("转错 180° 时差异显著变大",
+      diff(thumb(sample), thumb(idcard.rotate_card(sample, 180))) > 18)
+
+# rotate_card 的基本性质
+rot90 = idcard.rotate_card(sample, 90)
+check("转 90° 后宽高互换",
+      rot90.width() == sample.height() and rot90.height() == sample.width(),
+      f"{rot90.width()}x{rot90.height()}")
+check("转 0° 原样返回", idcard.rotate_card(sample, 0) is sample)
+check("转 360° 等同于不转",
+      diff(thumb(sample), thumb(idcard.rotate_card(sample, 360))) < 0.5)
+check("反转回去能还原",
+      diff(thumb(sample), thumb(idcard.rotate_card(idcard.rotate_card(sample, 90), -90))) < 0.5)
+
+# CardBox.rotation 与手工再转一次等价
+box_r = CardBox(b_back.cx, b_back.cy, b_back.w, b_back.h, b_back.angle, rotation=180)
+check("CardBox.rotation=180 与裁完再转一致",
+      diff(thumb(idcard.crop_card(back_img, box_r)),
+           thumb(idcard.rotate_card(idcard.crop_card(back_img, b_back), 180))) < 1.0)
+
 print("\n" + "=" * 56)
 print(f"通过 {ok} 项，失败 {fail} 项")
 print("=" * 56)

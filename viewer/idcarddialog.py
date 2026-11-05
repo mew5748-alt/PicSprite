@@ -67,6 +67,7 @@ class CardSlot(QWidget):
         self.path = ""
         self.box: Optional[CardBox] = None
         self._crop: Optional[QImage] = None
+        self.rotation = 0
 
         self.lb_title = QLabel(title)
         self.lb_title.setStyleSheet("font-weight:600;")
@@ -80,6 +81,14 @@ class CardSlot(QWidget):
         self.btn_adjust = QPushButton("调整裁剪…")
         self.btn_adjust.clicked.connect(self._adjust)
         self.btn_adjust.setEnabled(False)
+        self.btn_ccw = QPushButton("↺ 逆时针")
+        self.btn_ccw.setToolTip("把这张卡片逆时针转 90°")
+        self.btn_ccw.clicked.connect(lambda: self.rotate_by(-90))
+        self.btn_cw = QPushButton("↻ 顺时针")
+        self.btn_cw.setToolTip("把这张卡片顺时针转 90°")
+        self.btn_cw.clicked.connect(lambda: self.rotate_by(90))
+        for b in (self.btn_ccw, self.btn_cw):
+            b.setEnabled(False)
 
         right = QVBoxLayout()
         right.setContentsMargins(0, 0, 0, 0)
@@ -89,7 +98,14 @@ class CardSlot(QWidget):
         row.setSpacing(6)
         row.addWidget(self.btn_pick)
         row.addWidget(self.btn_adjust)
+        row.addStretch(1)
         right.addLayout(row)
+        row2 = QHBoxLayout()
+        row2.setSpacing(6)
+        row2.addWidget(self.btn_ccw)
+        row2.addWidget(self.btn_cw)
+        row2.addStretch(1)
+        right.addLayout(row2)
 
         body = QHBoxLayout(self)
         body.setContentsMargins(0, 0, 0, 0)
@@ -106,27 +122,33 @@ class CardSlot(QWidget):
         self.path = path
         self.box = None
         self._crop = None
+        self.rotation = 0
         if img is None or img.isNull():
             self.thumb.set_image(None)
             self.lb_state.setText("未选择")
             self.btn_adjust.setEnabled(False)
+            self.btn_ccw.setEnabled(False)
+            self.btn_cw.setEnabled(False)
             self.changed.emit()
             return
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
-            box = idcard.detect_card_box(img)
-            crop = idcard.crop_card(img, box)
+            crop, box = idcard.auto_crop(img)      # 自动识别边界，并自动摆正朝向
         finally:
             QApplication.restoreOverrideCursor()
         self.box = box
         self._crop = crop
+        self.rotation = int(box.rotation) % 360
         self.thumb.set_image(crop)
         self.btn_adjust.setEnabled(True)
+        self.btn_ccw.setEnabled(True)
+        self.btn_cw.setEnabled(True)
         self._update_state()
 
     def set_box(self, box: CardBox) -> None:
         if self.original is None:
             return
+        box.rotation = self.rotation
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
             crop = idcard.crop_card(self.original, box)
@@ -138,17 +160,35 @@ class CardSlot(QWidget):
         self._update_state()
         self.changed.emit()
 
+    def rotate_by(self, delta: int) -> None:
+        """把这张卡片再转 delta 度（90 的倍数）。转完会记住，重新框选裁剪也保持。"""
+        if self._crop is None:
+            return
+        self.rotation = (self.rotation + int(delta)) % 360
+        if self.box is not None:
+            self.box.rotation = self.rotation
+        self._crop = idcard.rotate_card(self._crop, delta)
+        self.thumb.set_image(self._crop)
+        self._update_state()
+        self.changed.emit()
+
+    def reset_rotation(self) -> None:
+        if self._crop is None or not self.rotation:
+            return
+        self.rotate_by(-self.rotation)
+
     def _update_state(self) -> None:
         name = os.path.basename(self.path) if self.path else ""
         head = f"{name}\n" if name else ""
+        rot = f" · 已转 {self.rotation}°" if self.rotation else ""
         if self.box is None:
             self.lb_state.setText("未选择")
         elif self.box.auto and self.box.confidence >= 0.55:
-            self.lb_state.setText(f"{head}已自动识别卡片边界")
+            self.lb_state.setText(f"{head}已自动识别卡片边界{rot}")
         elif self.box.auto:
-            self.lb_state.setText(f"{head}已自动裁剪\n有偏差可点「调整裁剪」")
+            self.lb_state.setText(f"{head}已自动裁剪{rot}\n有偏差可点「调整裁剪」")
         else:
-            self.lb_state.setText(f"{head}未识别到边界，已居中裁剪\n点「调整裁剪」可手动框选")
+            self.lb_state.setText(f"{head}未识别到边界，已居中裁剪{rot}\n点「调整裁剪」可手动框选")
 
     # ------------------------------------------------------------ 交互
     def _choose(self) -> None:

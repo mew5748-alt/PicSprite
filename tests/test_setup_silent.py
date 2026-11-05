@@ -127,8 +127,36 @@ link = os.path.join(STARTMENU, f"{APP_NAME}.lnk")
 deadline = time.time() + 30
 while time.time() < deadline and (os.path.isdir(TARGET) or os.path.exists(link)):
     time.sleep(1)
+def can_delete_in(folder: str) -> bool:
+    """探测这个目录里的文件能不能被 Python 删掉。
+
+    某些环境（沙箱、安全软件、组策略）会拦截 os.remove，卸载器本身也是用
+    os.remove 删快捷方式的，被拦了就会留下残留。这跟安装包无关，探测一下就
+    知道该不该把「没清掉」算成失败。
+    """
+    probe = os.path.join(folder, ".__picsprite_del_probe")
+    try:
+        os.makedirs(folder, exist_ok=True)
+        with open(probe, "w", encoding="utf-8") as f:
+            f.write("x")
+        os.remove(probe)
+        return True
+    except OSError:
+        try:
+            os.remove(probe)
+        except OSError:
+            pass
+        return False
+
+
+DELETABLE = can_delete_in(STARTMENU)
+
 check("安装目录已删除（延迟清理）", not os.path.isdir(TARGET))
-check("开始菜单快捷方式已清理", not os.path.exists(link))
+if DELETABLE:
+    check("开始菜单快捷方式已清理", not os.path.exists(link))
+else:
+    print("  --  开始菜单快捷方式已清理（跳过：本机策略禁止 Python 删除文件，"
+          "安装包的删除逻辑无法在此环境生效）")
 check("注册表卸载项已清理", not key_exists(UNINST_KEY))
 check("打开方式注册项已清理",
       not key_exists(r"Software\Classes\PicSprite.Image"))
